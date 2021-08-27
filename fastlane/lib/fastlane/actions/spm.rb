@@ -11,7 +11,7 @@ module Fastlane
         cmd << "--disable-sandbox" if params[:disable_sandbox]
         cmd << "--verbose" if params[:verbose]
         cmd << params[:command] if package_commands.include?(params[:command])
-        cmd << "--enable-code-coverage" if params[:enable_code_coverage] && params[:command] == 'generate-xcodeproj'
+        cmd << "--enable-code-coverage" if params[:enable_code_coverage] && (params[:command] == 'generate-xcodeproj' || params[:command] == 'test')
         if params[:xcconfig]
           cmd << "--xcconfig-overrides #{params[:xcconfig]}"
         end
@@ -47,8 +47,8 @@ module Fastlane
                                        end),
           FastlaneCore::ConfigItem.new(key: :enable_code_coverage,
                                        env_name: "FL_SPM_ENABLE_CODE_COVERAGE",
-                                       description: "Enables code coverage for the generated Xcode project when using the generate-xcodeproj command",
-                                       is_string: false,
+                                       description: "Enables code coverage for the generated Xcode project when using the 'generate-xcodeproj' and the 'test' command",
+                                       type: Boolean,
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :build_path,
                                        env_name: "FL_SPM_BUILD_PATH",
@@ -74,7 +74,7 @@ module Fastlane
                                        env_name: "FL_SPM_DISABLE_SANDBOX",
                                        description: "Disable using the sandbox when executing subprocesses",
                                        optional: true,
-                                       is_string: false,
+                                       type: Boolean,
                                        default_value: false),
           FastlaneCore::ConfigItem.new(key: :xcpretty_output,
                                        env_name: "FL_SPM_XCPRETTY_OUTPUT",
@@ -92,7 +92,7 @@ module Fastlane
                                        short_option: "-v",
                                        env_name: "FL_SPM_VERBOSE",
                                        description: "Increase verbosity of informational output",
-                                       is_string: false,
+                                       type: Boolean,
                                        default_value: false)
         ]
       end

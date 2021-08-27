@@ -21,6 +21,9 @@ module Spaceship
       attr_accessor :created_date
 
       attr_accessor :app_store_version_submission
+      attr_accessor :app_store_version_phased_release
+      attr_accessor :app_store_review_detail
+      attr_accessor :app_store_version_localizations
 
       module AppStoreState
         READY_FOR_SALE = "READY_FOR_SALE"
@@ -58,7 +61,10 @@ module Spaceship
         "createdDate" =>  "created_date",
 
         "appStoreVersionSubmission" => "app_store_version_submission",
-        "build" => "build"
+        "build" => "build",
+        "appStoreVersionPhasedRelease" => "app_store_version_phased_release",
+        "appStoreReviewDetail" => "app_store_review_detail",
+        "appStoreVersionLocalizations" => "app_store_version_localizations"
       })
 
       ESSENTIAL_INCLUDES = [
@@ -104,10 +110,9 @@ module Spaceship
       # Age Rating Declaration
       #
 
+      # @deprecated
       def fetch_age_rating_declaration(client: nil)
-        client ||= Spaceship::ConnectAPI
-        resp = client.get_age_rating_declaration(app_store_version_id: id)
-        return resp.to_models.first
+        raise 'AppStoreVersion no longer as AgeRatingDelcaration as of App Store Connect API 1.3 - Use AppInfo instead'
       end
 
       #

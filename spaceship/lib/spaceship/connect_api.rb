@@ -10,6 +10,7 @@ require 'spaceship/connect_api/tunes/tunes'
 
 require 'spaceship/connect_api/models/bundle_id_capability'
 require 'spaceship/connect_api/models/bundle_id'
+require 'spaceship/connect_api/models/capabilities'
 require 'spaceship/connect_api/models/certificate'
 require 'spaceship/connect_api/models/device'
 require 'spaceship/connect_api/models/profile'
@@ -31,10 +32,14 @@ require 'spaceship/connect_api/models/beta_tester_metric'
 require 'spaceship/connect_api/models/build'
 require 'spaceship/connect_api/models/build_delivery'
 require 'spaceship/connect_api/models/build_beta_detail'
+require 'spaceship/connect_api/models/build_bundle'
+require 'spaceship/connect_api/models/build_bundle_file_sizes'
 require 'spaceship/connect_api/models/custom_app_organization'
 require 'spaceship/connect_api/models/custom_app_user'
 require 'spaceship/connect_api/models/pre_release_version'
 
+require 'spaceship/connect_api/models/app_availability'
+require 'spaceship/connect_api/models/territory_availability'
 require 'spaceship/connect_api/models/app_data_usage'
 require 'spaceship/connect_api/models/app_data_usage_category'
 require 'spaceship/connect_api/models/app_data_usage_data_protection'
@@ -59,13 +64,21 @@ require 'spaceship/connect_api/models/app_screenshot'
 require 'spaceship/connect_api/models/app_store_version_localization'
 require 'spaceship/connect_api/models/app_store_version_phased_release'
 require 'spaceship/connect_api/models/app_store_version'
-require 'spaceship/connect_api/models/idfa_declaration'
+require 'spaceship/connect_api/models/review_submission'
+require 'spaceship/connect_api/models/review_submission_item'
 require 'spaceship/connect_api/models/reset_ratings_request'
 require 'spaceship/connect_api/models/sandbox_tester'
 require 'spaceship/connect_api/models/territory'
 
+require 'spaceship/connect_api/models/resolution_center_message'
+require 'spaceship/connect_api/models/resolution_center_thread'
+require 'spaceship/connect_api/models/review_rejection'
+require 'spaceship/connect_api/models/actor'
+
 module Spaceship
   class ConnectAPI
+    MAX_OBJECTS_PER_PAGE_LIMIT = 200
+
     # Defined in the App Store Connect API docs:
     # https://developer.apple.com/documentation/appstoreconnectapi/platform
     #
@@ -74,9 +87,10 @@ module Spaceship
       IOS = "IOS"
       MAC_OS = "MAC_OS"
       TV_OS = "TV_OS"
+      VISION_OS = "VISION_OS"
       WATCH_OS = "WATCH_OS"
 
-      ALL = [IOS, MAC_OS, TV_OS, WATCH_OS]
+      ALL = [IOS, MAC_OS, TV_OS, VISION_OS, WATCH_OS]
 
       def self.map(platform)
         return platform if ALL.include?(platform)
@@ -89,6 +103,8 @@ module Spaceship
           return Spaceship::ConnectAPI::Platform::MAC_OS
         when :ios
           return Spaceship::ConnectAPI::Platform::IOS
+        when :xros, :visionos
+          return Spaceship::ConnectAPI::Platform::VISION_OS
         else
           raise "Cannot find a matching platform for '#{platform}' - valid values are #{ALL.join(', ')}"
         end
@@ -111,7 +127,7 @@ module Spaceship
         case platform.to_sym
         when :osx, :macos, :mac
           return Spaceship::ConnectAPI::Platform::MAC_OS
-        when :ios
+        when :ios, :xros, :visionos
           return Spaceship::ConnectAPI::Platform::IOS
         else
           raise "Cannot find a matching platform for '#{platform}' - valid values are #{ALL.join(', ')}"

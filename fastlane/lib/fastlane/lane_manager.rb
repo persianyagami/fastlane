@@ -5,9 +5,8 @@ module Fastlane
     # @param platform The name of the platform to execute
     # @param lane_name The name of the lane to execute
     # @param parameters [Hash] The parameters passed from the command line to the lane
-    # @param env Dot Env Information
     # @param A custom Fastfile path, this is used by fastlane.ci
-    def self.cruise_lane(platform, lane, parameters = nil, env = nil, fastfile_path = nil)
+    def self.cruise_lane(platform, lane, parameters = nil, fastfile_path = nil)
       UI.user_error!("lane must be a string") unless lane.kind_of?(String) || lane.nil?
       UI.user_error!("platform must be a string") unless platform.kind_of?(String) || platform.nil?
       UI.user_error!("parameters must be a hash") unless parameters.kind_of?(Hash) || parameters.nil?
@@ -107,12 +106,13 @@ module Fastlane
 
       puts(table)
 
-      i = UI.input("Which number would you like run?")
+      fastlane_command = Helper.bundler? ? "bundle exec fastlane" : "fastlane"
+      i = UI.input("Which number would you like to run?")
 
       i = i.to_i - 1
       if i >= 0 && available[i]
         selection = available[i].last.pretty_name
-        UI.important("Running lane `#{selection}`. Next time you can do this by directly typing `fastlane #{selection}` 🚀.")
+        UI.important("Running lane `#{selection}`. Next time you can do this by directly typing `#{fastlane_command} #{selection}` 🚀.")
         platform = selection.split(' ')[0]
         lane_name = selection.split(' ')[1]
 
@@ -123,7 +123,7 @@ module Fastlane
 
         return platform, lane_name # yeah
       else
-        UI.user_error!("Run `fastlane` the next time you need to build, test or release your app 🚀")
+        UI.user_error!("Run `#{fastlane_command}` the next time you need to build, test or release your app 🚀")
       end
     end
   end

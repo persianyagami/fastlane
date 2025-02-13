@@ -16,7 +16,9 @@ module Spaceship
         APP_IPHONE_47 = "APP_IPHONE_47"
         APP_IPHONE_55 = "APP_IPHONE_55"
         APP_IPHONE_58 = "APP_IPHONE_58"
+        APP_IPHONE_61 = "APP_IPHONE_61"
         APP_IPHONE_65 = "APP_IPHONE_65"
+        APP_IPHONE_67 = "APP_IPHONE_67"
 
         APP_IPAD_97 = "APP_IPAD_97"
         APP_IPAD_105 = "APP_IPAD_105"
@@ -28,7 +30,9 @@ module Spaceship
         IMESSAGE_APP_IPHONE_47 = "IMESSAGE_APP_IPHONE_47"
         IMESSAGE_APP_IPHONE_55 = "IMESSAGE_APP_IPHONE_55"
         IMESSAGE_APP_IPHONE_58 = "IMESSAGE_APP_IPHONE_58"
+        IMESSAGE_APP_IPHONE_61 = "IMESSAGE_APP_IPHONE_61"
         IMESSAGE_APP_IPHONE_65 = "IMESSAGE_APP_IPHONE_65"
+        IMESSAGE_APP_IPHONE_67 = "IMESSAGE_APP_IPHONE_67"
 
         IMESSAGE_APP_IPAD_97 = "IMESSAGE_APP_IPAD_97"
         IMESSAGE_APP_IPAD_105 = "IMESSAGE_APP_IPAD_105"
@@ -38,6 +42,8 @@ module Spaceship
 
         APP_WATCH_SERIES_3 = "APP_WATCH_SERIES_3"
         APP_WATCH_SERIES_4 = "APP_WATCH_SERIES_4"
+        APP_WATCH_SERIES_7 = "APP_WATCH_SERIES_7"
+        APP_WATCH_ULTRA = "APP_WATCH_ULTRA"
 
         APP_APPLE_TV = "APP_APPLE_TV"
 
@@ -48,7 +54,9 @@ module Spaceship
           IMESSAGE_APP_IPHONE_47,
           IMESSAGE_APP_IPHONE_55,
           IMESSAGE_APP_IPHONE_58,
+          IMESSAGE_APP_IPHONE_61,
           IMESSAGE_APP_IPHONE_65,
+          IMESSAGE_APP_IPHONE_67,
 
           IMESSAGE_APP_IPAD_97,
           IMESSAGE_APP_IPAD_105,
@@ -63,7 +71,9 @@ module Spaceship
           APP_IPHONE_47,
           APP_IPHONE_55,
           APP_IPHONE_58,
+          APP_IPHONE_61,
           APP_IPHONE_65,
+          APP_IPHONE_67,
 
           APP_IPAD_97,
           APP_IPAD_105,
@@ -75,7 +85,9 @@ module Spaceship
           IMESSAGE_APP_IPHONE_47,
           IMESSAGE_APP_IPHONE_55,
           IMESSAGE_APP_IPHONE_58,
+          IMESSAGE_APP_IPHONE_61,
           IMESSAGE_APP_IPHONE_65,
+          IMESSAGE_APP_IPHONE_67,
 
           IMESSAGE_APP_IPAD_97,
           IMESSAGE_APP_IPAD_105,
@@ -85,6 +97,8 @@ module Spaceship
 
           APP_WATCH_SERIES_3,
           APP_WATCH_SERIES_4,
+          APP_WATCH_SERIES_7,
+          APP_WATCH_ULTRA,
 
           APP_DESKTOP
         ]
@@ -121,6 +135,11 @@ module Spaceship
       def self.get(client: nil, app_screenshot_set_id: nil, includes: "appScreenshots")
         client ||= Spaceship::ConnectAPI
         return client.get_app_screenshot_set(app_screenshot_set_id: app_screenshot_set_id, filter: nil, includes: includes, limit: nil, sort: nil).first
+      end
+
+      def delete!(client: nil, filter: {}, includes: nil, limit: nil, sort: nil)
+        client ||= Spaceship::ConnectAPI
+        return client.delete_app_screenshot_set(app_screenshot_set_id: id)
       end
 
       def upload_screenshot(client: nil, path: nil, wait_for_processing: true, position: nil)

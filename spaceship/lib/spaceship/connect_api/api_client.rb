@@ -65,11 +65,11 @@ module Spaceship
       end
 
       # Instance level hostname only used when creating
-      # App Store Connect API Farady client.
+      # App Store Connect API Faraday client.
       # Forwarding to class level if using web session.
       def hostname
         if @token
-          return "https://api.appstoreconnect.apple.com/v1/"
+          return @token.in_house ? "https://api.enterprise.developer.apple.com/" : "https://api.appstoreconnect.apple.com/"
         end
         return self.class.hostname
       end
@@ -87,13 +87,14 @@ module Spaceship
         return @token.nil?
       end
 
-      def build_params(filter: nil, includes: nil, limit: nil, sort: nil, cursor: nil)
+      def build_params(filter: nil, includes: nil, fields: nil, limit: nil, sort: nil, cursor: nil)
         params = {}
 
         filter = filter.delete_if { |k, v| v.nil? } if filter
 
         params[:filter] = filter if filter && !filter.empty?
         params[:include] = includes if includes
+        params[:fields] = fields if fields
         params[:limit] = limit if limit
         params[:sort] = sort if sort
         params[:cursor] = cursor if cursor
@@ -150,24 +151,45 @@ module Spaceship
 
       protected
 
-      def with_asc_retry(tries = 5, &_block)
-        tries = 1 if Object.const_defined?("SpecHelper")
+      class TimeoutRetryError < StandardError
+        def initialize(msg)
+          super
+        end
+      end
 
+      class TooManyRequestsError < StandardError
+        def initialize(msg)
+          super
+        end
+      end
+
+      def with_asc_retry(tries = 5, backoff = 1, &_block)
         response = yield
 
         status = response.status if response
 
         if [500, 504].include?(status)
           msg = "Timeout received! Retrying after 3 seconds (remaining: #{tries})..."
-          raise msg
+          raise TimeoutRetryError, msg
+        end
+
+        if status == 429
+          raise TooManyRequestsError, "Too many requests, backing off #{backoff} seconds"
         end
 
         return response
       rescue UnauthorizedAccessError => error
-        # Catch unathorized access and re-raising
-        # There is no need to try again
-        raise error
-      rescue => error
+        tries -= 1
+        puts(error) if Spaceship::Globals.verbose?
+        if tries.zero?
+          raise error
+        else
+          msg = "Token has expired, issued-at-time is in the future, or has been revoked! Trying to refresh..."
+          puts(msg) if Spaceship::Globals.verbose?
+          @token.refresh!
+          retry
+        end
+      rescue TimeoutRetryError => error
         tries -= 1
         puts(error) if Spaceship::Globals.verbose?
         if tries.zero?
@@ -175,6 +197,14 @@ module Spaceship
         else
           retry
         end
+      rescue TooManyRequestsError => error
+        if backoff > 3600
+          raise TooManyRequestsError, "Too many requests, giving up after backing off for > 3600 seconds."
+        end
+        puts(error) if Spaceship::Globals.verbose?
+        Kernel.sleep(backoff)
+        backoff *= 2
+        retry
       end
 
       def handle_response(response)
@@ -190,20 +220,49 @@ module Spaceship
 
         raise UnexpectedResponse, response.body['error'] if response.body['error']
 
-        raise UnexpectedResponse, handle_errors(response) if response.body['errors']
+        raise UnexpectedResponse, format_errors(response) if response.body['errors']
 
         raise UnexpectedResponse, "Temporary App Store Connect error: #{response.body}" if response.body['statusCode'] == 'ERROR'
 
         store_csrf_tokens(response)
 
-        return Spaceship::ConnectAPI::Response.new(body: response.body, status: response.status, client: self)
+        return Spaceship::ConnectAPI::Response.new(body: response.body, status: response.status, headers: response.headers, client: self)
       end
 
-      def handle_401(response)
-        raise UnauthorizedAccessError, handle_errors(response) if response && (response.body || {})['errors']
+      # Overridden from Spaceship::Client
+      def handle_error(response)
+        body = response.body.empty? ? {} : response.body
+
+        # Setting body nil if invalid JSON which can happen if 502
+        begin
+          body = JSON.parse(body) if body.kind_of?(String)
+        rescue
+          nil
+        end
+
+        case response.status.to_i
+        when 401
+          raise UnauthorizedAccessError, format_errors(response)
+        when 403
+          error = (body['errors'] || []).first || {}
+          error_code = error['code']
+          if error_code == "FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED"
+            raise ProgramLicenseAgreementUpdated, format_errors(response)
+          else
+            raise AccessForbiddenError, format_errors(response)
+          end
+        when 502
+          # Issue - https://github.com/fastlane/fastlane/issues/19264
+          # This 502 with "Could not process this request" body sometimes
+          # work and sometimes doesn't
+          # Usually retrying once or twice will solve the issue
+          if body && body.include?("Could not process this request")
+            raise BadGatewayError, "Could not process this request"
+          end
+        end
       end
 
-      def handle_errors(response)
+      def format_errors(response)
         # Example error format
         # {
         # "errors":[
@@ -247,8 +306,39 @@ module Spaceship
         # ]
         # }
 
-        return response.body['errors'].map do |error|
-          messages = [[error['title'], error['detail']].compact.join(" - ")]
+        # Detail is missing in this response making debugging super hard
+        # {"errors" =>
+        #   [
+        #     {
+        #       "id"=>"80ea6cff-0043-4543-9cd1-3e26b0fce383",
+        #       "status"=>"409",
+        #       "code"=>"ENTITY_ERROR.RELATIONSHIP.INVALID",
+        #       "title"=>"The provided entity includes a relationship with an invalid value",
+        #       "source"=>{
+        #         "pointer"=>"/data/relationships/primarySubcategoryOne"
+        #       }
+        #     }
+        #   ]
+        # }
+
+        # Membership expired
+        # {
+        #   "errors" : [
+        #     {
+        #       "id" : "UUID",
+        #       "status" : "403",
+        #       "code" : "FORBIDDEN_ERROR",
+        #       "title" : "This request is forbidden for security reasons",
+        #       "detail" : "Team ID: 'ID' is not associated with an active membership. To check your teams membership status, sign in your account on the developer website. https://developer.apple.com/account/"
+        #     }
+        #   ]
+        # }
+
+        body = response.body.empty? ? {} : response.body
+        body = JSON.parse(body) if body.kind_of?(String)
+
+        formatted_errors = (body['errors'] || []).map do |error|
+          messages = [[error['title'], error['detail'], error.dig("source", "pointer")].compact.join(" - ")]
 
           meta = error["meta"] || {}
           associated_errors = meta["associatedErrors"] || {}
@@ -257,6 +347,12 @@ module Spaceship
             [[associated_error["title"], associated_error["detail"]].compact.join(" - ")]
           end
         end.flatten.join("\n")
+
+        if formatted_errors.empty?
+          formatted_errors << "Unknown error"
+        end
+
+        return formatted_errors
       end
 
       private

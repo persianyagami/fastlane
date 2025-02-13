@@ -5,6 +5,11 @@ module Fastlane
         Actions.verify_gem!('xcov')
         require 'xcov'
 
+        if values[:xccov_file_direct_path].nil? && (path = Actions.lane_context[SharedValues::SCAN_GENERATED_XCRESULT_PATH])
+          UI.verbose("Pulling xcov 'xccov_file_direct_path' from SharedValues::SCAN_GENERATED_XCRESULT_PATH")
+          values[:xccov_file_direct_path] = path
+        end
+
         Xcov::Manager.new(values).run
       end
 
@@ -35,7 +40,7 @@ module Fastlane
         begin
           Gem::Specification.find_by_name('xcov')
         rescue Gem::LoadError
-          # Catched missing gem exception and returned empty array
+          # Catch missing gem exception and return empty array
           # to avoid unused_options_spec failure
           return []
         end

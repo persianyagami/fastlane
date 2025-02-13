@@ -21,7 +21,7 @@ module Gym
           print("Invalid code signing settings")
           print("Your project defines a provisioning profile that doesn't match the bundle identifier of your app")
           print("Make sure you use the correct provisioning profile for this app")
-          print("Take a look at the ouptput above for more information")
+          print("Take a look at the output above for more information")
           print("You can follow this guide: https://docs.fastlane.tools/codesigning/GettingStarted/")
         when /provisioning profiles matching the bundle identifier .(.*)./ # the . around the (.*) are for the strange "
           print("You don't have the provisioning profile for '#{$1}' installed on the local machine")
@@ -125,6 +125,14 @@ module Gym
         print("For an example you can check out")
         print("https://github.com/artsy/emission-nebula/commit/44fe51a7fea8f7d52f0f77d6c3084827fe5dd59e")
         UI.build_failure!("Archive invalid")
+      end
+
+      def handle_empty_ipa
+        UI.build_failure!("IPA invalid")
+      end
+
+      def handle_empty_pkg
+        UI.build_failure!("PKG invalid")
       end
 
       private

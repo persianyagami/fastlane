@@ -1,4 +1,5 @@
-require_relative '../model'
+require_relative '../../connect_api'
+
 module Spaceship
   class ConnectAPI
     class Profile
@@ -15,6 +16,7 @@ module Spaceship
 
       attr_accessor :bundle_id
       attr_accessor :certificates
+      attr_accessor :devices
 
       attr_mapping({
         "name" => "name",
@@ -51,6 +53,10 @@ module Spaceship
         MAC_CATALYST_APP_DEVELOPMENT = "MAC_CATALYST_APP_DEVELOPMENT"
         MAC_CATALYST_APP_STORE = "MAC_CATALYST_APP_STORE"
         MAC_CATALYST_APP_DIRECT = "MAC_CATALYST_APP_DIRECT"
+
+        # As of 2022-06-25, only available with Apple ID auth
+        MAC_APP_INHOUSE = "MAC_APP_INHOUSE"
+        MAC_CATALYST_APP_INHOUSE = "MAC_CATALYST_APP_INHOUSE"
       end
 
       def self.type
@@ -58,16 +64,23 @@ module Spaceship
       end
 
       def valid?
-        return profile_state == ProfileState::ACTIVE
+        # Provisioning profiles are not invalidated automatically on the dev portal when the certificate expires.
+        # They become Invalid only when opened directly in the portal 🤷.
+        # We need to do an extra check on the expiration date to ensure the profile is valid.
+        expired = Time.now.utc > Time.parse(self.expiration_date)
+
+        is_valid = profile_state == ProfileState::ACTIVE && !expired
+
+        return is_valid
       end
 
       #
       # API
       #
 
-      def self.all(client: nil, filter: {}, includes: nil, limit: nil, sort: nil)
+      def self.all(client: nil, filter: {}, includes: nil, fields: nil, limit: Spaceship::ConnectAPI::MAX_OBJECTS_PER_PAGE_LIMIT, sort: nil)
         client ||= Spaceship::ConnectAPI
-        resps = client.get_profiles(filter: filter, includes: includes).all_pages
+        resps = client.get_profiles(filter: filter, includes: includes, fields: fields, limit: limit, sort: sort).all_pages
         return resps.flat_map(&:to_models)
       end
 
@@ -89,6 +102,12 @@ module Spaceship
       def fetch_all_devices(client: nil, filter: {}, includes: nil, sort: nil)
         client ||= Spaceship::ConnectAPI
         resps = client.get_devices(profile_id: id, filter: filter, includes: includes).all_pages
+        return resps.flat_map(&:to_models)
+      end
+
+      def fetch_all_certificates(client: nil, filter: {}, includes: nil, sort: nil)
+        client ||= Spaceship::ConnectAPI
+        resps = client.get_certificates(profile_id: id, filter: filter, includes: includes).all_pages
         return resps.flat_map(&:to_models)
       end
 

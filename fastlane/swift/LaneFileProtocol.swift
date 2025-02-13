@@ -1,5 +1,5 @@
 // LaneFileProtocol.swift
-// Copyright (c) 2020 FastlaneTools
+// Copyright (c) 2024 FastlaneTools
 
 //
 //  ** NOTE **
@@ -10,27 +10,27 @@
 
 import Foundation
 
-public protocol LaneFileProtocol: class {
+public protocol LaneFileProtocol: AnyObject {
     var fastlaneVersion: String { get }
     static func runLane(from fastfile: LaneFile?, named lane: String, with parameters: [String: String]) -> Bool
 
     func recordLaneDescriptions()
     func beforeAll(with lane: String)
     func afterAll(with lane: String)
-    func onError(currentLane: String, errorInfo: String)
+    func onError(currentLane: String, errorInfo: String, errorClass: String?, errorMessage: String?)
 }
 
 public extension LaneFileProtocol {
     var fastlaneVersion: String { return "" } // Defaults to "" because that means any is fine
     func beforeAll(with _: String) {} // No-op by default
     func afterAll(with _: String) {} // No-op by default
-    func onError(currentLane _: String, errorInfo _: String) {} // No-op by default
     func recordLaneDescriptions() {} // No-op by default
 }
 
 @objcMembers
 open class LaneFile: NSObject, LaneFileProtocol {
     private(set) static var fastfileInstance: LaneFile?
+    private static var onErrorCalled = Set<String>()
 
     private static func trimLaneFromName(laneName: String) -> String {
         return String(laneName.prefix(laneName.count - 4))
@@ -38,6 +38,14 @@ open class LaneFile: NSObject, LaneFileProtocol {
 
     private static func trimLaneWithOptionsFromName(laneName: String) -> String {
         return String(laneName.prefix(laneName.count - 12))
+    }
+
+    open func beforeAll(with _: String) {}
+
+    open func afterAll(with _: String) {}
+
+    open func onError(currentLane: String, errorInfo _: String, errorClass _: String?, errorMessage _: String?) {
+        LaneFile.onErrorCalled.insert(currentLane)
     }
 
     private static var laneFunctionNames: [String] {
@@ -64,7 +72,7 @@ open class LaneFile: NSObject, LaneFileProtocol {
 
     public static var lanes: [String: String] {
         var laneToMethodName: [String: String] = [:]
-        laneFunctionNames.forEach { name in
+        for name in laneFunctionNames {
             let lowercasedName = name.lowercased()
             if lowercasedName.hasSuffix("lane") {
                 laneToMethodName[lowercasedName] = name
@@ -95,7 +103,7 @@ open class LaneFile: NSObject, LaneFileProtocol {
         #if !SWIFT_PACKAGE
             // When not in SPM environment, we load the Fastfile from its `className()`.
             loadFastfile()
-            guard let fastfileInstance = self.fastfileInstance as? Fastfile else {
+            guard let fastfileInstance = fastfileInstance as? Fastfile else {
                 let message = "Unable to instantiate class named: \(className())"
                 log(message: message)
                 fatalError(message)
@@ -114,11 +122,11 @@ open class LaneFile: NSObject, LaneFileProtocol {
         let lowerCasedLaneRequested = lane.lowercased()
 
         guard let laneMethod = currentLanes[lowerCasedLaneRequested] else {
-            let laneNames = laneFunctionNames.map { laneFuctionName in
-                if laneFuctionName.hasSuffix("lanewithoptions:") {
-                    return trimLaneWithOptionsFromName(laneName: laneFuctionName)
+            let laneNames = laneFunctionNames.map { laneFunctionName in
+                if laneFunctionName.hasSuffix("lanewithoptions:") {
+                    return trimLaneWithOptionsFromName(laneName: laneFunctionName)
                 } else {
-                    return trimLaneFromName(laneName: laneFuctionName)
+                    return trimLaneFromName(laneName: laneFunctionName)
                 }
             }.joined(separator: ", ")
 
@@ -137,7 +145,9 @@ open class LaneFile: NSObject, LaneFileProtocol {
         _ = fastfileInstance.perform(NSSelectorFromString(laneMethod), with: parameters)
 
         // Call only on success.
-        fastfileInstance.afterAll(with: lane)
+        if !LaneFile.onErrorCalled.contains(lane) {
+            fastfileInstance.afterAll(with: lane)
+        }
 
         log(message: "Done running lane: \(lane) 🚀")
         return true

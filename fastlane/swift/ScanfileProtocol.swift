@@ -1,24 +1,30 @@
 // ScanfileProtocol.swift
-// Copyright (c) 2020 FastlaneTools
+// Copyright (c) 2024 FastlaneTools
 
-public protocol ScanfileProtocol: class {
+public protocol ScanfileProtocol: AnyObject {
     /// Path to the workspace file
     var workspace: String? { get }
 
     /// Path to the project file
     var project: String? { get }
 
+    /// Path to the Swift Package
+    var packagePath: String? { get }
+
     /// The project's scheme. Make sure it's marked as `Shared`
     var scheme: String? { get }
 
-    /// The name of the simulator type you want to run tests on (e.g. 'iPhone 6')
+    /// The name of the simulator type you want to run tests on (e.g. 'iPhone 6' or 'iPhone SE (2nd generation) (14.5)')
     var device: String? { get }
 
-    /// Array of devices to run the tests on (e.g. ['iPhone 6', 'iPad Air'])
+    /// Array of devices to run the tests on (e.g. ['iPhone 6', 'iPad Air', 'iPhone SE (2nd generation) (14.5)'])
     var devices: [String]? { get }
 
     /// Should skip auto detecting of devices if none were specified
     var skipDetectDevices: Bool { get }
+
+    /// Should fail if devices not found
+    var ensureDevicesFound: Bool { get }
 
     /// Enabling this option will automatically killall Simulator processes before the run
     var forceQuitSimulator: Bool { get }
@@ -74,9 +80,6 @@ public protocol ScanfileProtocol: class {
     /// Should the HTML report be opened when tests are completed?
     var openReport: Bool { get }
 
-    /// Disable xcpretty formatting of build, similar to `output_style='raw'` but this will also skip the test results table
-    var disableXcpretty: Bool? { get }
-
     /// The directory in which all reports will be stored
     var outputDirectory: String { get }
 
@@ -98,8 +101,20 @@ public protocol ScanfileProtocol: class {
     /// Suppress the output of xcodebuild to stdout. Output is still saved in buildlog_path
     var suppressXcodeOutput: Bool? { get }
 
-    /// A custom xcpretty formatter to use
+    /// xcodebuild formatter to use (ex: 'xcbeautify', 'xcbeautify --quieter', 'xcpretty', 'xcpretty -test'). Use empty string (ex: '') to disable any formatter (More information: https://docs.fastlane.tools/best-practices/xcodebuild-formatters/)
+    var xcodebuildFormatter: String { get }
+
+    /// Remove retry attempts from test results table and the JUnit report (if not using xcpretty)
+    var outputRemoveRetryAttempts: Bool { get }
+
+    /// **DEPRECATED!** Use `output_style: 'raw'` instead - Disable xcpretty formatting of build, similar to `output_style='raw'` but this will also skip the test results table
+    var disableXcpretty: Bool? { get }
+
+    /// **DEPRECATED!** Use 'xcpretty_formatter' instead - A custom xcpretty formatter to use
     var formatter: String? { get }
+
+    /// A custom xcpretty formatter to use
+    var xcprettyFormatter: String? { get }
 
     /// Pass in xcpretty additional command line arguments (e.g. '--test --no-color' or '--tap --no-utf')
     var xcprettyArgs: String? { get }
@@ -110,11 +125,20 @@ public protocol ScanfileProtocol: class {
     /// Should zip the derived data build products and place in output path?
     var shouldZipBuildProducts: Bool { get }
 
+    /// Should provide additional copy of .xctestrun file (settings.xctestrun) and place in output path?
+    var outputXctestrun: Bool { get }
+
+    /// Custom path for the result bundle, overrides result_bundle
+    var resultBundlePath: String? { get }
+
     /// Should an Xcode result bundle be generated in the output directory
     var resultBundle: Bool { get }
 
     /// Generate the json compilation database with clang naming convention (compile_commands.json)
     var useClangReportName: Bool { get }
+
+    /// Optionally override the per-target setting in the scheme for running tests in parallel. Equivalent to -parallel-testing-enabled
+    var parallelTesting: Bool? { get }
 
     /// Specify the exact number of test runners that will be spawned during parallel testing. Equivalent to -parallel-testing-worker-count
     var concurrentWorkers: Int? { get }
@@ -176,8 +200,14 @@ public protocol ScanfileProtocol: class {
     /// Only post on Slack if the tests fail
     var slackOnlyOnFailure: Bool { get }
 
+    /// Specifies default payloads to include in Slack messages. For more info visit https://docs.fastlane.tools/actions/slack
+    var slackDefaultPayloads: [String]? { get }
+
     /// Use only if you're a pro, use the other options instead
     var destination: String? { get }
+
+    /// Adds arch=x86_64 to the xcodebuild 'destination' argument to run simulator in a Rosetta mode
+    var runRosettaSimulator: Bool { get }
 
     /// Platform to build when using a Catalyst enabled app. Valid values are: ios, macos
     var catalystPlatform: String? { get }
@@ -191,20 +221,34 @@ public protocol ScanfileProtocol: class {
     /// Sets a custom path for Swift Package Manager dependencies
     var clonedSourcePackagesPath: String? { get }
 
+    /// Skips resolution of Swift Package Manager dependencies
+    var skipPackageDependenciesResolution: Bool { get }
+
+    /// Prevents packages from automatically being resolved to versions other than those recorded in the `Package.resolved` file
+    var disablePackageAutomaticUpdates: Bool { get }
+
     /// Lets xcodebuild use system's scm configuration
     var useSystemScm: Bool { get }
 
+    /// The number of times a test can fail
+    var numberOfRetries: Int { get }
+
     /// Should this step stop the build if the tests fail? Set this to false if you're using trainer
     var failBuild: Bool { get }
+
+    /// Lets xcodebuild use a specified package authorization provider (keychain|netrc)
+    var packageAuthorizationProvider: String? { get }
 }
 
 public extension ScanfileProtocol {
     var workspace: String? { return nil }
     var project: String? { return nil }
+    var packagePath: String? { return nil }
     var scheme: String? { return nil }
     var device: String? { return nil }
     var devices: [String]? { return nil }
     var skipDetectDevices: Bool { return false }
+    var ensureDevicesFound: Bool { return false }
     var forceQuitSimulator: Bool { return false }
     var resetSimulator: Bool { return false }
     var disableSlideToType: Bool { return true }
@@ -223,7 +267,6 @@ public extension ScanfileProtocol {
     var addressSanitizer: Bool? { return nil }
     var threadSanitizer: Bool? { return nil }
     var openReport: Bool { return false }
-    var disableXcpretty: Bool? { return nil }
     var outputDirectory: String { return "./test_output" }
     var outputStyle: String? { return nil }
     var outputTypes: String { return "html,junit" }
@@ -231,12 +274,19 @@ public extension ScanfileProtocol {
     var buildlogPath: String { return "~/Library/Logs/scan" }
     var includeSimulatorLogs: Bool { return false }
     var suppressXcodeOutput: Bool? { return nil }
+    var xcodebuildFormatter: String { return "xcbeautify" }
+    var outputRemoveRetryAttempts: Bool { return false }
+    var disableXcpretty: Bool? { return nil }
     var formatter: String? { return nil }
+    var xcprettyFormatter: String? { return nil }
     var xcprettyArgs: String? { return nil }
     var derivedDataPath: String? { return nil }
     var shouldZipBuildProducts: Bool { return false }
+    var outputXctestrun: Bool { return false }
+    var resultBundlePath: String? { return nil }
     var resultBundle: Bool { return false }
     var useClangReportName: Bool { return false }
+    var parallelTesting: Bool? { return nil }
     var concurrentWorkers: Int? { return nil }
     var maxConcurrentSimulators: Int? { return nil }
     var disableConcurrentTesting: Bool { return false }
@@ -257,15 +307,21 @@ public extension ScanfileProtocol {
     var slackIconUrl: String { return "https://fastlane.tools/assets/img/fastlane_icon.png" }
     var skipSlack: Bool { return false }
     var slackOnlyOnFailure: Bool { return false }
+    var slackDefaultPayloads: [String]? { return nil }
     var destination: String? { return nil }
+    var runRosettaSimulator: Bool { return false }
     var catalystPlatform: String? { return nil }
     var customReportFileName: String? { return nil }
     var xcodebuildCommand: String { return "env NSUnbufferedIO=YES xcodebuild" }
     var clonedSourcePackagesPath: String? { return nil }
+    var skipPackageDependenciesResolution: Bool { return false }
+    var disablePackageAutomaticUpdates: Bool { return false }
     var useSystemScm: Bool { return false }
+    var numberOfRetries: Int { return 0 }
     var failBuild: Bool { return true }
+    var packageAuthorizationProvider: String? { return nil }
 }
 
 // Please don't remove the lines below
 // They are used to detect outdated files
-// FastlaneRunnerAPIVersion [0.9.61]
+// FastlaneRunnerAPIVersion [0.9.140]

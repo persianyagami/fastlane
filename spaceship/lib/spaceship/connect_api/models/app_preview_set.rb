@@ -17,6 +17,7 @@ module Spaceship
         IPHONE_55 = "IPHONE_55"
         IPHONE_58 = "IPHONE_58"
         IPHONE_65 = "IPHONE_65"
+        IPHONE_67 = "IPHONE_67"
 
         IPAD_97 = "IPAD_97"
         IPAD_105 = "IPAD_105"
@@ -33,6 +34,7 @@ module Spaceship
           IPHONE_55,
           IPHONE_58,
           IPHONE_65,
+          IPHONE_67,
 
           IPAD_97,
           IPAD_105,
@@ -67,6 +69,11 @@ module Spaceship
       def self.get(client: nil, app_preview_set_id: nil, includes: "appPreviews")
         client ||= Spaceship::ConnectAPI
         return client.get_app_preview_set(app_preview_set_id: app_preview_set_id, filter: nil, includes: includes, limit: nil, sort: nil).first
+      end
+
+      def delete!(client: nil, filter: {}, includes: nil, limit: nil, sort: nil)
+        client ||= Spaceship::ConnectAPI
+        return client.delete_app_preview_set(app_preview_set_id: id)
       end
 
       def upload_preview(client: nil, path: nil, wait_for_processing: true, position: nil, frame_time_code: nil)

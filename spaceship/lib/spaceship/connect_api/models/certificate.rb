@@ -1,4 +1,4 @@
-require_relative '../model'
+require_relative '../../connect_api'
 
 require 'openssl'
 
@@ -41,6 +41,10 @@ module Spaceship
         MAC_APP_DEVELOPMENT = "MAC_APP_DEVELOPMENT"
         DEVELOPER_ID_KEXT = "DEVELOPER_ID_KEXT"
         DEVELOPER_ID_APPLICATION = "DEVELOPER_ID_APPLICATION"
+        DEVELOPER_ID_APPLICATION_G2 = "DEVELOPER_ID_APPLICATION_G2"
+
+        # As of 2021-11-09, this is only available with Apple ID auth
+        DEVELOPER_ID_INSTALLER = "DEVELOPER_ID_INSTALLER"
       end
 
       def self.type
@@ -51,7 +55,7 @@ module Spaceship
         Time.parse(expiration_date) > Time.now
       end
 
-      # Create a new code signing request that can be used to
+      # Create a new cert signing request that can be used to
       # generate a new certificate
       # @example
       #  Create a new certificate signing request
@@ -67,7 +71,7 @@ module Spaceship
                                                 ['CN', 'PEM', OpenSSL::ASN1::UTF8STRING]
                                               ])
         csr.public_key = key.public_key
-        csr.sign(key, OpenSSL::Digest::SHA1.new)
+        csr.sign(key, OpenSSL::Digest::SHA256.new)
         return [csr, key]
       end
 
@@ -75,9 +79,9 @@ module Spaceship
       # API
       #
 
-      def self.all(client: nil, filter: {}, includes: nil, limit: nil, sort: nil)
+      def self.all(client: nil, filter: {}, includes: nil, fields: nil, limit: Spaceship::ConnectAPI::MAX_OBJECTS_PER_PAGE_LIMIT, sort: nil)
         client ||= Spaceship::ConnectAPI
-        resps = client.get_certificates(filter: filter, includes: includes).all_pages
+        resps = client.get_certificates(filter: filter, includes: includes, fields: fields, limit: limit, sort: sort).all_pages
         return resps.flat_map(&:to_models)
       end
 

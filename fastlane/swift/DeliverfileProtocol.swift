@@ -1,15 +1,15 @@
 // DeliverfileProtocol.swift
-// Copyright (c) 2020 FastlaneTools
+// Copyright (c) 2024 FastlaneTools
 
-public protocol DeliverfileProtocol: class {
+public protocol DeliverfileProtocol: AnyObject {
     /// Path to your App Store Connect API Key JSON file (https://docs.fastlane.tools/app-store-connect-api/#using-fastlane-api-key-json-file)
     var apiKeyPath: String? { get }
 
-    /// Your App Store Connect API Key information (https://docs.fastlane.tools/app-store-connect-api/#use-return-value-and-pass-in-as-an-option)
+    /// Your App Store Connect API Key information (https://docs.fastlane.tools/app-store-connect-api/#using-fastlane-api-key-hash-option)
     var apiKey: [String: Any]? { get }
 
     /// Your Apple ID Username
-    var username: String { get }
+    var username: String? { get }
 
     /// The bundle identifier of your app
     var appIdentifier: String? { get }
@@ -59,16 +59,28 @@ public protocol DeliverfileProtocol: class {
     /// Clear all previously uploaded screenshots before uploading the new ones
     var overwriteScreenshots: Bool { get }
 
+    /// Timeout in seconds to wait before considering screenshot processing as failed, used to handle cases where uploads to the App Store are stuck in processing
+    var screenshotProcessingTimeout: Int { get }
+
+    /// Sync screenshots with local ones. This is currently beta option so set true to 'FASTLANE_ENABLE_BETA_DELIVER_SYNC_SCREENSHOTS' environment variable as well
+    var syncScreenshots: Bool { get }
+
     /// Submit the new version for Review after uploading everything
     var submitForReview: Bool { get }
+
+    /// Verifies archive with App Store Connect without uploading
+    var verifyOnly: Bool { get }
 
     /// Rejects the previously submitted build if it's in a state where it's possible
     var rejectIfPossible: Bool { get }
 
-    /// Should the app be automatically released once it's approved? (Can not be used together with `auto_release_date`)
+    /// After submitting a new version, App Store Connect takes some time to recognize the new version and we must wait until it's available before attempting to upload metadata for it. There is a mechanism that will check if it's available and retry with an exponential backoff if it's not available yet. This option specifies how many times we should retry before giving up. Setting this to a value below 5 is not recommended and will likely cause failures. Increase this parameter when Apple servers seem to be degraded or slow
+    var versionCheckWaitRetryLimit: Int { get }
+
+    /// Should the app be automatically released once it's approved? (Cannot be used together with `auto_release_date`)
     var automaticRelease: Bool? { get }
 
-    /// Date in milliseconds for automatically releasing on pending approval (Can not be used together with `automatic_release`)
+    /// Date in milliseconds for automatically releasing on pending approval (Cannot be used together with `automatic_release`)
     var autoReleaseDate: Int? { get }
 
     /// Enable the phased release feature of iTC
@@ -78,12 +90,12 @@ public protocol DeliverfileProtocol: class {
     var resetRatings: Bool { get }
 
     /// The price tier of this application
-    var priceTier: String? { get }
+    var priceTier: Int? { get }
 
     /// Path to the app rating's config
     var appRatingConfigPath: String? { get }
 
-    /// Extra information for the submission (e.g. compliance specifications, IDFA settings)
+    /// Extra information for the submission (e.g. compliance specifications)
     var submissionInformation: [String: Any]? { get }
 
     /// The ID of your App Store Connect team if you're in multiple teams
@@ -137,7 +149,7 @@ public protocol DeliverfileProtocol: class {
     /// Metadata: The english name of the secondary second sub category (e.g. `Educational`, `Puzzle`)
     var secondarySecondSubCategory: String? { get }
 
-    /// Metadata: A hash containing the trade representative contact information
+    /// **DEPRECATED!** This is no longer used by App Store Connect - Metadata: A hash containing the trade representative contact information
     var tradeRepresentativeContactInformation: [String: Any]? { get }
 
     /// Metadata: A hash containing the review information
@@ -147,10 +159,10 @@ public protocol DeliverfileProtocol: class {
     var appReviewAttachmentFile: String? { get }
 
     /// Metadata: The localised app description
-    var description: String? { get }
+    var description: [String: Any]? { get }
 
     /// Metadata: The localised app name
-    var name: String? { get }
+    var name: [String: Any]? { get }
 
     /// Metadata: The localised app subtitle
     var subtitle: [String: Any]? { get }
@@ -162,19 +174,19 @@ public protocol DeliverfileProtocol: class {
     var promotionalText: [String: Any]? { get }
 
     /// Metadata: Localised release notes for this version
-    var releaseNotes: String? { get }
+    var releaseNotes: [String: Any]? { get }
 
     /// Metadata: Localised privacy url
-    var privacyUrl: String? { get }
+    var privacyUrl: [String: Any]? { get }
 
     /// Metadata: Localised Apple TV privacy policy text
-    var appleTvPrivacyPolicy: String? { get }
+    var appleTvPrivacyPolicy: [String: Any]? { get }
 
     /// Metadata: Localised support url
-    var supportUrl: String? { get }
+    var supportUrl: [String: Any]? { get }
 
     /// Metadata: Localised marketing url
-    var marketingUrl: String? { get }
+    var marketingUrl: [String: Any]? { get }
 
     /// Metadata: List of languages to activate
     var languages: [String]? { get }
@@ -186,13 +198,13 @@ public protocol DeliverfileProtocol: class {
     var precheckIncludeInAppPurchases: Bool { get }
 
     /// The (spaceship) app ID of the app you want to use/modify
-    var app: String { get }
+    var app: Int? { get }
 }
 
 public extension DeliverfileProtocol {
     var apiKeyPath: String? { return nil }
     var apiKey: [String: Any]? { return nil }
-    var username: String { return "" }
+    var username: String? { return nil }
     var appIdentifier: String? { return nil }
     var appVersion: String? { return nil }
     var ipa: String? { return nil }
@@ -209,13 +221,17 @@ public extension DeliverfileProtocol {
     var skipAppVersionUpdate: Bool { return false }
     var force: Bool { return false }
     var overwriteScreenshots: Bool { return false }
+    var screenshotProcessingTimeout: Int { return 3600 }
+    var syncScreenshots: Bool { return false }
     var submitForReview: Bool { return false }
+    var verifyOnly: Bool { return false }
     var rejectIfPossible: Bool { return false }
+    var versionCheckWaitRetryLimit: Int { return 7 }
     var automaticRelease: Bool? { return nil }
     var autoReleaseDate: Int? { return nil }
     var phasedRelease: Bool { return false }
     var resetRatings: Bool { return false }
-    var priceTier: String? { return nil }
+    var priceTier: Int? { return nil }
     var appRatingConfigPath: String? { return nil }
     var submissionInformation: [String: Any]? { return nil }
     var teamId: String? { return nil }
@@ -238,22 +254,22 @@ public extension DeliverfileProtocol {
     var tradeRepresentativeContactInformation: [String: Any]? { return nil }
     var appReviewInformation: [String: Any]? { return nil }
     var appReviewAttachmentFile: String? { return nil }
-    var description: String? { return nil }
-    var name: String? { return nil }
+    var description: [String: Any]? { return nil }
+    var name: [String: Any]? { return nil }
     var subtitle: [String: Any]? { return nil }
     var keywords: [String: Any]? { return nil }
     var promotionalText: [String: Any]? { return nil }
-    var releaseNotes: String? { return nil }
-    var privacyUrl: String? { return nil }
-    var appleTvPrivacyPolicy: String? { return nil }
-    var supportUrl: String? { return nil }
-    var marketingUrl: String? { return nil }
+    var releaseNotes: [String: Any]? { return nil }
+    var privacyUrl: [String: Any]? { return nil }
+    var appleTvPrivacyPolicy: [String: Any]? { return nil }
+    var supportUrl: [String: Any]? { return nil }
+    var marketingUrl: [String: Any]? { return nil }
     var languages: [String]? { return nil }
     var ignoreLanguageDirectoryValidation: Bool { return false }
     var precheckIncludeInAppPurchases: Bool { return true }
-    var app: String { return "" }
+    var app: Int? { return nil }
 }
 
 // Please don't remove the lines below
 // They are used to detect outdated files
-// FastlaneRunnerAPIVersion [0.9.53]
+// FastlaneRunnerAPIVersion [0.9.132]

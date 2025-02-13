@@ -59,10 +59,18 @@ module Match
         self.clone_branch_directly = clone_branch_directly
         self.git_basic_authorization = git_basic_authorization
         self.git_bearer_authorization = git_bearer_authorization
-        self.git_private_key = git_private_key
+        self.git_private_key = convert_private_key_path_to_absolute(git_private_key)
 
         self.type = type if type
         self.platform = platform if platform
+      end
+
+      def convert_private_key_path_to_absolute(git_private_key)
+        if !git_private_key.nil? && File.file?(File.expand_path(git_private_key))
+          File.expand_path(git_private_key).shellescape.to_s
+        else
+          git_private_key
+        end
       end
 
       def prefixed_working_directory
@@ -77,27 +85,24 @@ module Match
         self.working_directory = Dir.mktmpdir
 
         command = "git clone #{self.git_url.shellescape} #{self.working_directory.shellescape}"
-        # HTTP headers are supposed to be be case insensitive but
+        # HTTP headers are supposed to be case-insensitive but
         # Bitbucket requires `Authorization: Basic` and `Authorization Bearer` to work
         # https://github.com/fastlane/fastlane/pull/15928
         command << " -c http.extraheader='Authorization: Basic #{self.git_basic_authorization}'" unless self.git_basic_authorization.nil?
         command << " -c http.extraheader='Authorization: Bearer #{self.git_bearer_authorization}'" unless self.git_bearer_authorization.nil?
 
         if self.shallow_clone
-          command << " --depth 1 --no-single-branch"
-        elsif self.clone_branch_directly
-          command += " -b #{self.branch.shellescape} --single-branch"
+          command << " --depth 1"
         end
 
-        unless self.git_private_key.nil?
-          if File.file?(self.git_private_key)
-            ssh_add = File.expand_path(self.git_private_key).shellescape.to_s
-          else
-            UI.message("Private key file does not exist, will continue by using it as a raw key.")
-            ssh_add = "- <<< \"#{self.git_private_key}\""
-          end
-          command = "ssh-agent bash -c 'ssh-add #{ssh_add}; #{command}'"
+        if self.clone_branch_directly
+          command += " -b #{self.branch.shellescape} --single-branch"
+        elsif self.shallow_clone
+          # shallow clone all branches if not cloning branch directly
+          command += " --no-single-branch"
         end
+
+        command = command_from_private_key(command) unless self.git_private_key.nil?
 
         UI.message("Cloning remote git repo...")
         if self.branch && !self.clone_branch_directly
@@ -135,9 +140,10 @@ module Match
       end
 
       def delete_files(files_to_delete: [], custom_message: nil)
-        # No specific list given, e.g. this happens on `fastlane match nuke`
-        # We just want to run `git add -A` to commit everything
-        git_push(commands: ["git add -A"], commit_message: custom_message)
+        if files_to_delete.count > 0
+          commands = files_to_delete.map { |filename|  "git rm #{filename.shellescape}" }
+          git_push(commands: commands, commit_message: custom_message)
+        end
       end
 
       def upload_files(files_to_upload: [], custom_message: nil)
@@ -168,6 +174,16 @@ module Match
 
       def list_files(file_name: "", file_ext: "")
         Dir[File.join(working_directory, "**", file_name, "*.#{file_ext}")]
+      end
+
+      def command_from_private_key(command)
+        if File.file?(self.git_private_key)
+          ssh_add = File.expand_path(self.git_private_key).shellescape.to_s
+        else
+          UI.message("Private key file does not exist, will continue by using it as a raw key.")
+          ssh_add = "- <<< \"#{self.git_private_key}\""
+        end
+        return "ssh-agent bash -c 'ssh-add #{ssh_add}; #{command}'"
       end
 
       private
@@ -231,7 +247,9 @@ module Match
       def git_push(commands: [], commit_message: nil)
         commit_message ||= generate_commit_message
         commands << "git commit -m #{commit_message.shellescape}"
-        commands << "git push origin #{self.branch.shellescape}"
+        git_push_command = "git push origin #{self.branch.shellescape}"
+        git_push_command = command_from_private_key(git_push_command) unless self.git_private_key.nil?
+        commands << git_push_command
 
         UI.message("Pushing changes to remote git repo...")
         Helper.with_env_values('GIT_TERMINAL_PROMPT' => '0') do

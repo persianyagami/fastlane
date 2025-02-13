@@ -54,7 +54,7 @@ module Produce
                                      optional: true,
                                      default_value: "ios",
                                      verify_block: proc do |value|
-                                                     UI.user_error!("The platform can only be ios or osx") unless %('ios', 'osx', 'tvos').include?(value)
+                                                     UI.user_error!("The platform can only be ios, osx or tvos") unless %w(ios osx tvos).include?(value)
                                                    end),
         FastlaneCore::ConfigItem.new(key: :platforms,
                                      short_option: "-J",
@@ -77,7 +77,7 @@ module Produce
         FastlaneCore::ConfigItem.new(key: :company_name,
                                      short_option: "-c",
                                      env_name: "PRODUCE_COMPANY_NAME",
-                                     description: "The name of your company. Only required if it's the first app you create",
+                                     description: "The name of your company. It's used to set company name on App Store Connect team's app pages. Only required if it's the first app you create",
                                      optional: true),
         FastlaneCore::ConfigItem.new(key: :skip_itc,
                                      short_option: "-i",

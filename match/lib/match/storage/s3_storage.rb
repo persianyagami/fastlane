@@ -101,7 +101,16 @@ module Match
         # No existing working directory, creating a new one now
         self.working_directory = Dir.mktmpdir
 
-        s3_client.find_bucket!(s3_bucket).objects(prefix: s3_object_prefix).each do |object|
+        # If team_id is defined, use `:team/` as a prefix (appending it at the end of the `s3_object_prefix` if one provided by the user),
+        # so that we limit the download to only files that are specific to this team, and avoid downloads + decryption of unnecessary files.
+        key_prefix = team_id.nil? ? s3_object_prefix : File.join(s3_object_prefix, team_id, '').delete_prefix('/')
+
+        s3_client.find_bucket!(s3_bucket).objects(prefix: key_prefix).each do |object|
+          # Prevent download if the file path is a directory.
+          # We need to check if string ends with "/" instead of using `File.directory?` because
+          # the string represent a remote location, not a local file in disk.
+          next if object.key.end_with?("/")
+
           file_path = strip_s3_object_prefix(object.key) # :s3_object_prefix:team_id/path/to/file
 
           # strip s3_prefix from file_path
@@ -115,7 +124,7 @@ module Match
         UI.verbose("Successfully downloaded files from S3 to #{self.working_directory}")
       end
 
-      # Returns a short string describing + identifing the current
+      # Returns a short string describing + identifying the current
       # storage backend. This will be printed when nuking a storage
       def human_readable_description
         return "S3 Bucket [#{s3_bucket}] on region #{s3_region}"
@@ -168,14 +177,14 @@ module Match
       private
 
       def s3_object_path(file_name)
-        santized = sanitize_file_name(file_name)
-        return santized if santized.start_with?(s3_object_prefix)
+        sanitized = sanitize_file_name(file_name)
+        return sanitized if sanitized.start_with?(s3_object_prefix)
 
-        s3_object_prefix + santized
+        s3_object_prefix + sanitized
       end
 
       def strip_s3_object_prefix(object_path)
-        object_path.gsub(/^#{s3_object_prefix}/, "")
+        object_path.delete_prefix(s3_object_prefix.to_s).delete_prefix('/')
       end
 
       def sanitize_file_name(file_name)
@@ -196,8 +205,8 @@ module Match
       end
 
       def api_token
-        api_token ||= Spaceship::ConnectAPI::Token.create(self.api_key) if self.api_key
-        api_token ||= Spaceship::ConnectAPI::Token.from_json_file(self.api_key_path) if self.api_key_path
+        api_token = Spaceship::ConnectAPI::Token.from(hash: self.api_key, filepath: self.api_key_path)
+        api_token ||= Spaceship::ConnectAPI.token
         return api_token
       end
     end

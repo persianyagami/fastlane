@@ -29,6 +29,31 @@ describe Fastlane do
           end
         end
 
+        describe "calls setup_keychain after setup_output_paths if CODEBUILD_BUILD_ARN env variable is set on Mac Agents" do
+          before do
+            stub_const("ENV", { "CODEBUILD_BUILD_ARN" => "anything" })
+          end
+          it "runs on Mac" do
+            allow(FastlaneCore::Helper).to receive(:mac?).and_return(true)
+
+            # Message is asserted in reverse order, hence output of setup_output_paths is expected last
+            expect(Fastlane::UI).to receive(:message).with("Enabling match readonly mode.")
+            expect(Fastlane::UI).to receive(:message).with("Creating temporary keychain: \"fastlane_tmp_keychain\".")
+            expect(Fastlane::UI).to receive(:message).with("Skipping Log Path setup as FL_OUTPUT_DIR is unset")
+
+            described_class.run(force: true)
+          end
+
+          it "skips on linux" do
+            allow(FastlaneCore::Helper).to receive(:mac?).and_return(false)
+
+            expect(Fastlane::UI).to receive(:message).with("Skipping Log Path setup as FL_OUTPUT_DIR is unset")
+            expect(Fastlane::UI).to receive(:message).with("Skipping Keychain setup on non-macOS CI Agent")
+
+            described_class.run(provider: "circleci")
+          end
+        end
+
         describe "calls setup_keychain if no provider is be detected on Mac Agents" do
           it "runs on Mac" do
             allow(FastlaneCore::Helper).to receive(:mac?).and_return(true)
@@ -95,7 +120,17 @@ describe Fastlane do
         end
       end
 
-      context "when not running on CircleCI" do
+      context "When running on CodeBuild" do
+        before do
+          stub_const("ENV", { "CODEBUILD_BUILD_ARN" => "anything" })
+        end
+
+        it "returns codebuild when :provider is not set" do
+          expect(described_class.detect_provider({})).to eql("codebuild")
+        end
+      end
+
+      context "when not running on CircleCI and CodeBuild" do
         before do
           # Unset environment to ensure CIRCLECI is not set even if the test suite is run on CircleCI
           stub_const("ENV", {})
@@ -117,7 +152,7 @@ describe Fastlane do
           stub_const("ENV", { "MATCH_KEYCHAIN_NAME" => "anything" })
           allow(FastlaneCore::Helper).to receive(:mac?).and_return(true)
           expect(Fastlane::UI).to receive(:message).with("Skipping Keychain setup as a keychain was already specified")
-          described_class.setup_keychain
+          described_class.setup_keychain(timeout: 3600)
         end
       end
 
@@ -129,17 +164,17 @@ describe Fastlane do
         end
 
         it "sets the MATCH_KEYCHAIN_NAME env var" do
-          described_class.setup_keychain
+          described_class.setup_keychain(timeout: 3600)
           expect(ENV["MATCH_KEYCHAIN_NAME"]).to eql("fastlane_tmp_keychain")
         end
 
         it "sets the MATCH_KEYCHAIN_PASSWORD env var" do
-          described_class.setup_keychain
+          described_class.setup_keychain(timeout: 3600)
           expect(ENV["MATCH_KEYCHAIN_PASSWORD"]).to eql("")
         end
 
         it "sets the MATCH_READONLY env var" do
-          described_class.setup_keychain
+          described_class.setup_keychain(timeout: 3600)
           expect(ENV["MATCH_READONLY"]).to eql("true")
         end
       end
@@ -150,7 +185,7 @@ describe Fastlane do
           allow(Fastlane::Actions::CreateKeychainAction).to receive(:run).and_return(nil)
           allow(FastlaneCore::Helper).to receive(:mac?).and_return(false)
           expect(Fastlane::UI).to receive(:message).with("Skipping Keychain setup on non-macOS CI Agent")
-          described_class.setup_keychain
+          described_class.setup_keychain(timeout: 3600)
         end
       end
     end

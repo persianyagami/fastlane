@@ -7,13 +7,15 @@ def sigh_stub_spaceship_connect(inhouse: false, create_profile_app_identifier: n
 
   # Mock cert
   certificate = "certificate"
-  allow(certificate).to receive(:id).and_return("id")
+  allow(certificate).to receive(:id).and_return("123456789")
+  allow(certificate).to receive(:display_name).and_return("Roger Oba")
+  allow(certificate).to receive(:expiration_date).and_return("2021-07-22T00:27:42.000+0000")
   allow(certificate).to receive(:certificate_content).and_return(Base64.encode64("cert content"))
-  allow(Spaceship::ConnectAPI::Certificate).to receive(:all).and_return([certificate])
+  allow(Spaceship::ConnectAPI::Certificate).to receive(:all).and_return([certificate, certificate])
 
   device = "device"
   allow(device).to receive(:id).and_return(1)
-  allow(Spaceship::ConnectAPI::Device).to receive(:all).and_return([device])
+  allow(Spaceship::ConnectAPI::Device).to receive(:devices_for_platform).and_return([device])
 
   bundle_ids = all_app_identifiers.map do |id|
     Spaceship::ConnectAPI::BundleId.new("123", {
@@ -39,6 +41,7 @@ def sigh_stub_spaceship_connect(inhouse: false, create_profile_app_identifier: n
         profileContent: Base64.encode64("profile content")
       })
       allow(profile).to receive(:bundle_id).and_return(bundle_id)
+      allow(profile).to receive(:expiration_date).and_return(Date.today.next_year.to_time.utc.strftime("%Y-%m-%dT%H:%M:%S%:z"))
 
       profile
     end
@@ -60,11 +63,19 @@ def sigh_stub_spaceship_connect(inhouse: false, create_profile_app_identifier: n
 
       expect(profile).to receive(:delete!) if expect_delete
 
+      if valid_profiles
+        allow(profile).to receive(:expiration_date).and_return(Date.today.next_year.to_time.utc.strftime("%Y-%m-%dT%H:%M:%S%:z"))
+      else
+        allow(profile).to receive(:expiration_date).and_return(Date.today.prev_year.to_time.utc.strftime("%Y-%m-%dT%H:%M:%S%:z"))
+      end
+
       profile
     end
   end
-  allow(Spaceship::ConnectAPI::Profile).to receive(:all).with(anything).and_return(profiles)
   allow(Spaceship::ConnectAPI::Profile).to receive(:all).and_return(profiles)
+  profiles.each do |profile|
+    allow(Spaceship::ConnectAPI::Profile).to receive(:all).with(filter: { name: profile.name }).and_return([profile])
+  end
 
   # Stubs production to only receive certs
   certs = [Spaceship.certificate.production]

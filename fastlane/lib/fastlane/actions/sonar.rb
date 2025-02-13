@@ -20,6 +20,7 @@ module Fastlane
         sonar_scanner_args << "-Dsonar.language=\"#{params[:project_language]}\"" if params[:project_language]
         sonar_scanner_args << "-Dsonar.sourceEncoding=\"#{params[:source_encoding]}\"" if params[:source_encoding]
         sonar_scanner_args << "-Dsonar.login=\"#{params[:sonar_login]}\"" if params[:sonar_login]
+        sonar_scanner_args << "-Dsonar.token=\"#{params[:sonar_token]}\"" if params[:sonar_token]
         sonar_scanner_args << "-Dsonar.host.url=\"#{params[:sonar_url]}\"" if params[:sonar_url]
         sonar_scanner_args << "-Dsonar.organization=\"#{params[:sonar_organization]}\"" if params[:sonar_organization]
         sonar_scanner_args << "-Dsonar.branch.name=\"#{params[:branch_name]}\"" if params[:branch_name]
@@ -60,12 +61,12 @@ module Fastlane
       def self.available_options
         [
           FastlaneCore::ConfigItem.new(key: :project_configuration_path,
-                                        env_name: "FL_SONAR_RUNNER_PROPERTIES_PATH",
-                                        description: "The path to your sonar project configuration file; defaults to `sonar-project.properties`", # default is enforced by sonar-scanner binary
-                                        optional: true,
-                                        verify_block: proc do |value|
-                                          UI.user_error!("Couldn't find file at path '#{value}'") unless value.nil? || File.exist?(value)
-                                        end),
+                                       env_name: "FL_SONAR_RUNNER_PROPERTIES_PATH",
+                                       description: "The path to your sonar project configuration file; defaults to `sonar-project.properties`", # default is enforced by sonar-scanner binary
+                                       optional: true,
+                                       verify_block: proc do |value|
+                                         UI.user_error!("Couldn't find file at path '#{value}'") unless value.nil? || File.exist?(value)
+                                       end),
           FastlaneCore::ConfigItem.new(key: :project_key,
                                        env_name: "FL_SONAR_RUNNER_PROJECT_KEY",
                                        description: "The key sonar uses to identify the project, e.g. `name.gretzki.awesomeApp`. Must either be specified here or inside the sonar project configuration file",
@@ -100,40 +101,41 @@ module Fastlane
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :sonar_login,
                                        env_name: "FL_SONAR_LOGIN",
-                                       description: "Pass the Sonar Login token (e.g: xxxxxxprivate_token_XXXXbXX7e)",
+                                       description: "Pass the Sonar Login Token (e.g: xxxxxxprivate_token_XXXXbXX7e)",
+                                       deprecated: "Login and password were deprecated in favor of login token. See https://community.sonarsource.com/t/deprecating-sonar-login-and-sonar-password-in-favor-of-sonar-token/95829 for more details",
                                        optional: true,
-                                       is_string: true,
-                                       sensitive: true),
+                                       sensitive: true,
+                                       conflicting_options: [:sonar_token]),
+          FastlaneCore::ConfigItem.new(key: :sonar_token,
+                                       env_name: "FL_SONAR_TOKEN",
+                                       description: "Pass the Sonar Token (e.g: xxxxxxprivate_token_XXXXbXX7e)",
+                                       optional: true,
+                                       sensitive: true,
+                                       conflicting_options: [:sonar_login]),
           FastlaneCore::ConfigItem.new(key: :sonar_url,
                                        env_name: "FL_SONAR_URL",
                                        description: "Pass the url of the Sonar server",
-                                       optional: true,
-                                       is_string: true),
+                                       optional: true),
           FastlaneCore::ConfigItem.new(key: :sonar_organization,
                                        env_name: "FL_SONAR_ORGANIZATION",
                                        description: "Key of the organization on SonarCloud",
-                                       optional: true,
-                                       is_string: true),
+                                       optional: true),
           FastlaneCore::ConfigItem.new(key: :branch_name,
                                        env_name: "FL_SONAR_RUNNER_BRANCH_NAME",
                                        description: "Pass the branch name which is getting scanned",
-                                       optional: true,
-                                       is_string: true),
+                                       optional: true),
           FastlaneCore::ConfigItem.new(key: :pull_request_branch,
                                        env_name: "FL_SONAR_RUNNER_PULL_REQUEST_BRANCH",
                                        description: "The name of the branch that contains the changes to be merged",
-                                       optional: true,
-                                       is_string: true),
+                                       optional: true),
           FastlaneCore::ConfigItem.new(key: :pull_request_base,
                                        env_name: "FL_SONAR_RUNNER_PULL_REQUEST_BASE",
                                        description: "The long-lived branch into which the PR will be merged",
-                                       optional: true,
-                                       is_string: true),
+                                       optional: true),
           FastlaneCore::ConfigItem.new(key: :pull_request_key,
                                        env_name: "FL_SONAR_RUNNER_PULL_REQUEST_KEY",
                                        description: "Unique identifier of your PR. Must correspond to the key of the PR in GitHub or TFS",
-                                       optional: true,
-                                       is_string: true)
+                                       optional: true)
         ]
       end
 
@@ -163,7 +165,7 @@ module Fastlane
             project_name: "iOS - AwesomeApp",
             sources_path: File.expand_path("../AwesomeApp"),
             sonar_organization: "myOrg",
-            sonar_login: "123456abcdef",
+            sonar_token: "123456abcdef",
             sonar_url: "https://sonarcloud.io"
           )'
         ]

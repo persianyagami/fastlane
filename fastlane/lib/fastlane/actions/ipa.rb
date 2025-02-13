@@ -90,7 +90,7 @@ module Fastlane
             UI.error(txt)
           end
 
-          # Raise a custom exception, as the the normal one is useless for the user
+          # Raise a custom exception, as the normal one is useless for the user
           UI.user_error!("A build error occurred, this is usually related to code signing. Take a look at the error above")
         end
       end
@@ -159,12 +159,12 @@ module Fastlane
                                        env_name: "IPA_CLEAN",
                                        description: "Clean project before building",
                                        optional: true,
-                                       is_string: false),
+                                       type: Boolean),
           FastlaneCore::ConfigItem.new(key: :archive,
                                        env_name: "IPA_ARCHIVE",
                                        description: "Archive project after building",
                                        optional: true,
-                                       is_string: false),
+                                       type: Boolean),
           FastlaneCore::ConfigItem.new(key: :destination,
                                        env_name: "IPA_DESTINATION",
                                        description: "Build destination. Defaults to current directory",

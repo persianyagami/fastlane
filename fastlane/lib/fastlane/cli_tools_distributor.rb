@@ -23,7 +23,7 @@ module Fastlane
       def take_off
         before_import_time = Time.now
 
-        if !ENV["FASTLANE_DISABLE_ANIMATION"]
+        if ENV["FASTLANE_DISABLE_ANIMATION"].nil?
           # Usually in the fastlane code base we use
           #
           #   Helper.show_loading_indicator
@@ -71,10 +71,14 @@ module Fastlane
         # Disabling colors if environment variable set
         require 'fastlane_core/ui/disable_colors' if FastlaneCore::Helper.colors_disabled?
 
+        # Set interactive environment variable for spaceship (which can't require fastlane_core)
+        ENV["FASTLANE_IS_INTERACTIVE"] = FastlaneCore::UI.interactive?.to_s
+
         ARGV.unshift("spaceship") if ARGV.first == "spaceauth"
         tool_name = ARGV.first ? ARGV.first.downcase : nil
 
         tool_name = process_emojis(tool_name)
+        tool_name = map_aliased_tools(tool_name)
 
         if tool_name && Fastlane::TOOLS.include?(tool_name.to_sym) && !available_lanes.include?(tool_name.to_sym)
           # Triggering a specific tool
@@ -122,6 +126,10 @@ module Fastlane
         FastlaneCore::UpdateChecker.show_update_status('fastlane', Fastlane::VERSION)
       end
 
+      def map_aliased_tools(tool_name)
+        Fastlane::TOOL_ALIASES[tool_name&.to_sym] || tool_name
+      end
+
       # Since loading dotenv should respect additional environments passed using
       # --env, we must extract the arguments out of ARGV and process them before
       # calling into commander. This is required since the ENV must be configured
@@ -154,7 +162,7 @@ module Fastlane
       end
 
       def print_bundle_exec_warning(is_slow: false)
-        return if FastlaneCore::Helper.bundler? # user is alread using bundler
+        return if FastlaneCore::Helper.bundler? # user is already using bundler
         return if FastlaneCore::Env.truthy?('SKIP_SLOW_FASTLANE_WARNING') # user disabled the warnings
         return if FastlaneCore::Helper.contained_fastlane? # user uses the bundled fastlane
 

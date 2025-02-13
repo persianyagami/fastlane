@@ -103,7 +103,7 @@ module Spaceship
           # will result in a false failure. The response will return a 503 but the database
           # insert will eventually go through.
           #
-          # When this is observed, we will poll until we find the matchin screenshot that
+          # When this is observed, we will poll until we find the matching screenshot that
           # is awaiting for upload and file size
           #
           # https://github.com/fastlane/fastlane/pull/16842
@@ -112,7 +112,7 @@ module Spaceship
           timeout_minutes = (ENV["SPACESHIP_SCREENSHOT_UPLOAD_TIMEOUT"] || 20).to_i
 
           loop do
-            # This error handling needs to be revised since any error occured can reach here.
+            # This error handling needs to be revised since any error occurred can reach here.
             # It should handle errors based on what status code is.
             puts("Waiting for screenshots to appear before uploading. This is unlikely to be recovered unless it's 503 error. error=\"#{error}\"")
             sleep(30)
@@ -143,7 +143,7 @@ module Spaceship
         }
 
         # Patch screenshot that file upload is complete
-        # Catch error if patch retries due to 504. Origal patch
+        # Catch error if patch retries due to 504. Original patch
         # may go through by return response as 504.
         begin
           screenshot = Spaceship::ConnectAPI.patch_app_screenshot(

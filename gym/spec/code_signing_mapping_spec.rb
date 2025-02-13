@@ -1,4 +1,4 @@
-describe Gym::CodeSigningMapping do
+describe Gym::CodeSigningMapping, requires_xcodebuild: true do
   describe "#app_identifier_contains?" do
     it "returns false if it doesn't contain it" do
       csm = Gym::CodeSigningMapping.new(project: nil)
@@ -28,26 +28,28 @@ describe Gym::CodeSigningMapping do
   describe "#detect_project_profile_mapping" do
     it "returns the mapping of the selected provisioning profiles", requires_xcode: true do
       workspace_path = "gym/spec/fixtures/projects/cocoapods/Example.xcworkspace"
-      project = FastlaneCore::Project.new({
-        workspace: workspace_path
-      })
+      options = { workspace: workspace_path, scheme: "Example" }
+      project = FastlaneCore::Project.new(options)
+      Gym.config = FastlaneCore::Configuration.create(Gym::Options.available_options, options)
       csm = Gym::CodeSigningMapping.new(project: project)
       expect(csm.detect_project_profile_mapping).to eq({ "family.wwdc.app" => "match AppStore family.wwdc.app", "family.wwdc.app.watchkitapp" => "match AppStore family.wwdc.app.watchkitapp", "family.wwdc.app.watchkitapp.watchkitextension" => "match AppStore family.wwdc.app.watchkitappextension" })
     end
 
     it "detects the build configuration from selected scheme", requires_xcode: true do
       workspace_path = "gym/spec/fixtures/projects/cocoapods/Example.xcworkspace"
-      project = FastlaneCore::Project.new({ workspace: workspace_path })
+      options = { workspace: workspace_path, scheme: "Example (Debug)" }
+      project = FastlaneCore::Project.new(options)
+      Gym.config = FastlaneCore::Configuration.create(Gym::Options.available_options, options)
       csm = Gym::CodeSigningMapping.new(project: project)
-      Gym.config[:scheme] = "Example (Debug)"
       expect(csm.detect_project_profile_mapping).to eq({ "family.wwdc.app" => "match Development family.wwdc.app", "family.wwdc.app.watchkitapp" => "match Development family.wwdc.app.watchkitapp", "family.wwdc.app.watchkitapp.watchkitextension" => "match Development family.wwdc.app.watchkitappextension" })
     end
 
     it "detects the build configuration from selected scheme of a project based on inheritance for resolve xcconfigs", requires_xcode: true do
       workspace_path = "gym/spec/fixtures/projects/projectBasedOnInheritance/ExampleWithInheritedXcconfig.xcworkspace"
-      project = FastlaneCore::Project.new({ workspace: workspace_path })
+      options = { workspace: workspace_path, scheme: "Target A" }
+      project = FastlaneCore::Project.new(options)
+      Gym.config = FastlaneCore::Configuration.create(Gym::Options.available_options, options)
       csm = Gym::CodeSigningMapping.new(project: project)
-      Gym.config[:scheme] = "Target A"
       expect(csm.detect_project_profile_mapping).to eq({ "com.targeta.release" => "release-targeta", "com.targetb.release" => "release-targetb" })
     end
   end
@@ -55,11 +57,10 @@ describe Gym::CodeSigningMapping do
   describe "#detect_project_profile_mapping_for_tv_os" do
     it "returns the mapping of the selected provisioning profiles for tv_os", requires_xcode: true do
       workspace_path = "gym/spec/fixtures/projects/cocoapods/Example.xcworkspace"
-      project = FastlaneCore::Project.new({
-        workspace: workspace_path
-      })
+      options = { workspace: workspace_path, scheme: "ExampletvOS", destination: "generic/platform=tvOS" }
+      project = FastlaneCore::Project.new(options)
+      Gym.config = FastlaneCore::Configuration.create(Gym::Options.available_options, options)
       csm = Gym::CodeSigningMapping.new(project: project)
-      Gym.config[:destination] = "generic/platform=tvOS"
       expect(csm.detect_project_profile_mapping).to eq({ "family.wwdc.app" => "match AppStore family.wwdc.app.tvos" })
     end
   end
@@ -105,40 +106,48 @@ describe Gym::CodeSigningMapping do
       expect(result).to eq({ "identifier.1": "value.1" })
     end
 
-    describe "handle conflicts" do
-      it "Both primary and secondary are available, and both match the export method, it should prefer the primary mapping" do
-        result = csm.merge_profile_mapping(primary_mapping: { "identifier.1" => "Ap-pStoreValue2" },
-                                       secondary_mapping: { "identifier.1" => "Ap-pStoreValue1" },
-                                           export_method: "app-store")
+    context "Both primary and secondary are available" do
+      context "Both match the export method" do
+        it "should prefer the primary mapping" do
+          result = csm.merge_profile_mapping(primary_mapping: { "identifier.1" => "Ap-pStoreValue2" },
+                                         secondary_mapping: { "identifier.1" => "Ap-pStoreValue1" },
+                                             export_method: "app-store")
 
-        expect(result).to eq({ "identifier.1": "Ap-pStoreValue2" })
+          expect(result).to eq({ "identifier.1": "Ap-pStoreValue2" })
+        end
       end
 
-      it "Both primary and secondary are available, and the secondary is the only one that matches the export type" do
-        result = csm.merge_profile_mapping(primary_mapping: { "identifier.1" => "Ap-p StoreValue1" },
-                                       secondary_mapping: { "identifier.1" => "Ad-HocValue" },
-                                           export_method: "app-store")
+      context "The primary is the only one that matches the export type" do
+        it "should prefer the primary mapping" do
+          result = csm.merge_profile_mapping(primary_mapping: { "identifier.1" => "Ap-p StoreValue1" },
+                                         secondary_mapping: { "identifier.1" => "Ad-HocValue" },
+                                             export_method: "app-store")
 
-        expect(result).to eq({ "identifier.1": "Ap-p StoreValue1" })
+          expect(result).to eq({ "identifier.1": "Ap-p StoreValue1" })
+        end
       end
 
-      it "Both primary and secondary are available, and the seocndary is the only one that matches the export type" do
-        result = csm.merge_profile_mapping(primary_mapping: { "identifier.1" => "Ap-p StoreValue1" },
-                                       secondary_mapping: { "identifier.1" => "Ad-HocValue" },
-                                           export_method: "ad-hoc")
+      context "The secondary is the only one that matches the export type" do
+        it "should prefer the secondary mapping" do
+          result = csm.merge_profile_mapping(primary_mapping: { "identifier.1" => "Ap-p StoreValue1" },
+                                         secondary_mapping: { "identifier.1" => "Ad-HocValue" },
+                                             export_method: "ad-hoc")
 
-        expect(result).to eq({ "identifier.1": "Ad-HocValue" })
+          expect(result).to eq({ "identifier.1": "Ad-HocValue" })
+        end
       end
 
-      it "both primary and secondary are available, and neither of them match the export type, it should choose the secondary_mapping" do
-        result = csm.merge_profile_mapping(primary_mapping: { "identifier.1" => "AppStore" },
-                                       secondary_mapping: { "identifier.1" => "Adhoc" },
-                                           export_method: "development")
+      context "Neither of them match the export type" do
+        it "should choose the secondary_mapping" do
+          result = csm.merge_profile_mapping(primary_mapping: { "identifier.1" => "AppStore" },
+                                         secondary_mapping: { "identifier.1" => "Adhoc" },
+                                             export_method: "development")
 
-        expect(result).to eq({ "identifier.1": "Adhoc" })
+          expect(result).to eq({ "identifier.1": "Adhoc" })
+        end
       end
 
-      context "when both primary and secondary are available and same value" do
+      context "Both have the same value" do
         let(:result) do
           csm.merge_profile_mapping(primary_mapping: { primary_key => "AppStore" },
                                     secondary_mapping: { secondary_key => "AppStore" },
@@ -174,26 +183,26 @@ describe Gym::CodeSigningMapping do
         end
       end
     end
+  end
 
-    describe "#test_target?" do
-      let(:csm) { Gym::CodeSigningMapping.new(project: nil) }
-      context "when build_setting include TEST_TARGET_NAME" do
-        it "is test target" do
-          build_settings = { "TEST_TARGET_NAME" => "Sample" }
-          expect(csm.test_target?(build_settings)).to be(true)
-        end
+  describe "#test_target?" do
+    let(:csm) { Gym::CodeSigningMapping.new(project: nil) }
+    context "when build_setting include TEST_TARGET_NAME" do
+      it "is test target" do
+        build_settings = { "TEST_TARGET_NAME" => "Sample" }
+        expect(csm.test_target?(build_settings)).to be(true)
       end
-      context "when build_setting include TEST_HOST" do
-        it "is test target" do
-          build_settings = { "TEST_HOST" => "Sample" }
-          expect(csm.test_target?(build_settings)).to be(true)
-        end
+    end
+    context "when build_setting include TEST_HOST" do
+      it "is test target" do
+        build_settings = { "TEST_HOST" => "Sample" }
+        expect(csm.test_target?(build_settings)).to be(true)
       end
-      context "when build_setting include neither TEST_HOST nor TEST_TARGET_NAME" do
-        it "is not test target" do
-          build_settings = {}
-          expect(csm.test_target?(build_settings)).to be(false)
-        end
+    end
+    context "when build_setting include neither TEST_HOST nor TEST_TARGET_NAME" do
+      it "is not test target" do
+        build_settings = {}
+        expect(csm.test_target?(build_settings)).to be(false)
       end
     end
   end

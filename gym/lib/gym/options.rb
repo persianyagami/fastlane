@@ -1,4 +1,5 @@
 require 'fastlane_core/configuration/config_item'
+require 'fastlane/helper/xcodebuild_formatter_helper'
 require 'credentials_manager/appfile_config'
 require_relative 'module'
 
@@ -105,11 +106,11 @@ module Gym
         FastlaneCore::ConfigItem.new(key: :export_method,
                                      short_option: "-j",
                                      env_name: "GYM_EXPORT_METHOD",
-                                     description: "Method used to export the archive. Valid values are: app-store, ad-hoc, package, enterprise, development, developer-id",
+                                     description: "Method used to export the archive. Valid values are: app-store, validation, ad-hoc, package, enterprise, development, developer-id and mac-application",
                                      type: String,
                                      optional: true,
                                      verify_block: proc do |value|
-                                       av = %w(app-store ad-hoc package enterprise development developer-id)
+                                       av = %w(app-store validation ad-hoc package enterprise development developer-id mac-application)
                                        UI.user_error!("Unsupported export_method '#{value}', must be: #{av}") unless av.include?(value)
                                      end),
         FastlaneCore::ConfigItem.new(key: :export_options,
@@ -151,7 +152,7 @@ module Gym
                                      optional: true,
                                      verify_block: proc do |value|
                                        av = %w(ios macos)
-                                       UI.user_error!("Unsupported export_method '#{value}', must be: #{av}") unless av.include?(value)
+                                       UI.user_error!("Unsupported catalyst_platform '#{value}', must be: #{av}") unless av.include?(value)
                                      end),
         FastlaneCore::ConfigItem.new(key: :installer_cert_name,
                                      env_name: "GYM_INSTALLER_CERT_NAME",
@@ -230,8 +231,25 @@ module Gym
                                      description: "Suppress the output of xcodebuild to stdout. Output is still saved in buildlog_path",
                                      optional: true,
                                      type: Boolean),
+
+        FastlaneCore::ConfigItem.new(key: :xcodebuild_formatter,
+                                     env_names: ["GYM_XCODEBUILD_FORMATTER", "FASTLANE_XCODEBUILD_FORMATTER"],
+                                     description: "xcodebuild formatter to use (ex: 'xcbeautify', 'xcbeautify --quieter', 'xcpretty', 'xcpretty -test'). Use empty string (ex: '') to disable any formatter (More information: https://docs.fastlane.tools/best-practices/xcodebuild-formatters/)",
+                                     type: String,
+                                     default_value: Fastlane::Helper::XcodebuildFormatterHelper.xcbeautify_installed? ? 'xcbeautify' : 'xcpretty',
+                                     default_value_dynamic: true),
+
+        FastlaneCore::ConfigItem.new(key: :build_timing_summary,
+                                     env_name: "GYM_BUILD_TIMING_SUMMARY",
+                                     description: "Create a build timing summary",
+                                     type: Boolean,
+                                     default_value: false,
+                                     optional: true),
+
+        # xcpretty
         FastlaneCore::ConfigItem.new(key: :disable_xcpretty,
                                      env_name: "DISABLE_XCPRETTY",
+                                     deprecated: "Use `xcodebuild_formatter: ''` instead",
                                      description: "Disable xcpretty formatting of build output",
                                      optional: true,
                                      type: Boolean),
@@ -259,14 +277,15 @@ module Gym
                                      env_name: "XCPRETTY_REPORT_JSON",
                                      description: "Have xcpretty create a JSON compilation database at the provided path",
                                      optional: true),
-        FastlaneCore::ConfigItem.new(key: :analyze_build_time,
-                                     env_name: "GYM_ANALYZE_BUILD_TIME",
-                                     description: "Analyze the project build time and store the output in 'culprits.txt' file",
-                                     optional: true,
-                                     type: Boolean),
         FastlaneCore::ConfigItem.new(key: :xcpretty_utf,
                                      env_name: "XCPRETTY_UTF",
                                      description: "Have xcpretty use unicode encoding when reporting builds",
+                                     optional: true,
+                                     type: Boolean),
+
+        FastlaneCore::ConfigItem.new(key: :analyze_build_time,
+                                     env_name: "GYM_ANALYZE_BUILD_TIME",
+                                     description: "Analyze the project build time and store the output in 'culprits.txt' file",
                                      optional: true,
                                      type: Boolean),
         FastlaneCore::ConfigItem.new(key: :skip_profile_detection,
@@ -275,17 +294,42 @@ module Gym
                                      optional: true,
                                      type: Boolean,
                                      default_value: false),
+        FastlaneCore::ConfigItem.new(key: :xcodebuild_command,
+                                     env_name: "GYM_XCODE_BUILD_COMMAND",
+                                     description: "Allows for override of the default `xcodebuild` command",
+                                     type: String,
+                                     optional: true,
+                                     default_value: "xcodebuild"),
         FastlaneCore::ConfigItem.new(key: :cloned_source_packages_path,
                                      env_name: "GYM_CLONED_SOURCE_PACKAGES_PATH",
                                      description: "Sets a custom path for Swift Package Manager dependencies",
                                      type: String,
                                      optional: true),
+        FastlaneCore::ConfigItem.new(key: :skip_package_dependencies_resolution,
+                                     env_name: "GYM_SKIP_PACKAGE_DEPENDENCIES_RESOLUTION",
+                                     description: "Skips resolution of Swift Package Manager dependencies",
+                                     type: Boolean,
+                                     default_value: false),
+        FastlaneCore::ConfigItem.new(key: :disable_package_automatic_updates,
+                                     env_name: "GYM_DISABLE_PACKAGE_AUTOMATIC_UPDATES",
+                                     description: "Prevents packages from automatically being resolved to versions other than those recorded in the `Package.resolved` file",
+                                     type: Boolean,
+                                     default_value: false),
         FastlaneCore::ConfigItem.new(key: :use_system_scm,
                                      env_name: "GYM_USE_SYSTEM_SCM",
                                      description: "Lets xcodebuild use system's scm configuration",
                                      optional: true,
                                      type: Boolean,
-                                     default_value: false)
+                                     default_value: false),
+        FastlaneCore::ConfigItem.new(key: :package_authorization_provider,
+                                     env_name: "GYM_PACKAGE_AUTHORIZATION_PROVIDER",
+                                     description: "Lets xcodebuild use a specified package authorization provider (keychain|netrc)",
+                                     optional: true,
+                                     type: String,
+                                     verify_block: proc do |value|
+                                       av = %w(netrc keychain)
+                                       UI.user_error!("Unsupported authorization provider '#{value}', must be: #{av}") unless av.include?(value)
+                                     end)
       ]
     end
   end

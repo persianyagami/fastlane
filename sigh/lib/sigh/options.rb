@@ -1,6 +1,10 @@
 require 'fastlane_core/configuration/configuration'
 require 'credentials_manager/appfile_config'
 require_relative 'module'
+require 'spaceship/connect_api/models/device'
+require 'spaceship/connect_api/models/certificate'
+require 'spaceship/connect_api/models/bundle_id'
+require 'spaceship/connect_api/models/profile'
 
 module Sigh
   class Options
@@ -47,6 +51,11 @@ module Sigh
                                      is_string: false,
                                      short_option: "-f",
                                      default_value: false),
+        FastlaneCore::ConfigItem.new(key: :include_mac_in_profiles,
+                                     env_name: "SIGH_INCLUDE_MAC_IN_PROFILES",
+                                     description: "Include Apple Silicon Mac devices in provisioning profiles for iOS/iPadOS apps",
+                                     is_string: false,
+                                     default_value: false),
         FastlaneCore::ConfigItem.new(key: :app_identifier,
                                      short_option: "-a",
                                      env_name: "SIGH_APP_IDENTIFIER",
@@ -57,7 +66,7 @@ module Sigh
 
         # App Store Connect API
         FastlaneCore::ConfigItem.new(key: :api_key_path,
-                                     env_name: "SIGH_API_KEY_PATH",
+                                     env_names: ["SIGH_API_KEY_PATH", "APP_STORE_CONNECT_API_KEY_PATH"],
                                      description: "Path to your App Store Connect API Key JSON file (https://docs.fastlane.tools/app-store-connect-api/#using-fastlane-api-key-json-file)",
                                      optional: true,
                                      conflicting_options: [:api_key],
@@ -65,8 +74,8 @@ module Sigh
                                        UI.user_error!("Couldn't find API key JSON file at path '#{value}'") unless File.exist?(value)
                                      end),
         FastlaneCore::ConfigItem.new(key: :api_key,
-                                     env_name: "SIGH_API_KEY",
-                                     description: "Your App Store Connect API Key information (https://docs.fastlane.tools/app-store-connect-api/#use-return-value-and-pass-in-as-an-option)",
+                                     env_names: ["SIGH_API_KEY", "APP_STORE_CONNECT_API_KEY"],
+                                     description: "Your App Store Connect API Key information (https://docs.fastlane.tools/app-store-connect-api/#using-fastlane-api-key-hash-option)",
                                      type: Hash,
                                      optional: true,
                                      sensitive: true,
@@ -77,6 +86,7 @@ module Sigh
                                      short_option: "-u",
                                      env_name: "SIGH_USERNAME",
                                      description: "Your Apple ID Username",
+                                     optional: true,
                                      default_value: user,
                                      default_value_dynamic: true),
         FastlaneCore::ConfigItem.new(key: :team_id,
@@ -143,12 +153,18 @@ module Sigh
                                      is_string: false,
                                      default_value: false,
                                      short_option: "-w"),
+        FastlaneCore::ConfigItem.new(key: :include_all_certificates,
+                                     env_name: "SIGH_INCLUDE_ALL_CERTIFICATES",
+                                     description: "Include all matching certificates in the provisioning profile. Works only for the 'development' provisioning profile type",
+                                     is_string: false,
+                                     default_value: false),
         FastlaneCore::ConfigItem.new(key: :skip_certificate_verification,
                                      short_option: '-z',
                                      env_name: "SIGH_SKIP_CERTIFICATE_VERIFICATION",
                                      description: "Skips the verification of the certificates for every existing profiles. This will make sure the provisioning profile can be used on the local machine",
                                      is_string: false,
-                                     default_value: false),
+                                     default_value: !FastlaneCore::Helper.mac?,
+                                     default_value_dynamic: true),
         FastlaneCore::ConfigItem.new(key: :platform,
                                      short_option: '-p',
                                      env_name: "SIGH_PLATFORM",
@@ -180,7 +196,57 @@ module Sigh
                                      description: "Should the command fail if it was about to create a duplicate of an existing provisioning profile. It can happen due to issues on Apple Developer Portal, when profile to be recreated was not properly deleted first",
                                      optional: true,
                                      is_string: false,
-                                     default_value: false)
+                                     default_value: false),
+
+        # Cache
+        FastlaneCore::ConfigItem.new(key: :cached_certificates,
+                                     description: "A list of cached certificates",
+                                     optional: true,
+                                     is_string: false,
+                                     default_value: nil,
+                                     verify_block: proc do |value|
+                                       next if value.nil?
+                                       if !value.kind_of?(Array) ||
+                                         !value.all?(Spaceship::ConnectAPI::Certificate)
+                                         UI.user_error!("cached_certificates parameter must be an array of Spaceship::ConnectAPI::Certificate") unless value.kind_of?(Array)
+                                       end
+                                     end),
+        FastlaneCore::ConfigItem.new(key: :cached_devices,
+                                     description: "A list of cached devices",
+                                     optional: true,
+                                     is_string: false,
+                                     default_value: nil,
+                                     verify_block: proc do |value|
+                                       next if value.nil?
+                                       if !value.kind_of?(Array) ||
+                                         !value.all?(Spaceship::ConnectAPI::Device)
+                                         UI.user_error!("cached_devices parameter must be an array of Spaceship::ConnectAPI::Device")
+                                       end
+                                     end),
+        FastlaneCore::ConfigItem.new(key: :cached_bundle_ids,
+                                     description: "A list of cached bundle ids",
+                                     optional: true,
+                                     is_string: false,
+                                     default_value: nil,
+                                     verify_block: proc do |value|
+                                       next if value.nil?
+                                       if !value.kind_of?(Array) ||
+                                         !value.all?(Spaceship::ConnectAPI::BundleId)
+                                         UI.user_error!("cached_bundle_ids parameter must be an array of Spaceship::ConnectAPI::BundleId")
+                                       end
+                                     end),
+        FastlaneCore::ConfigItem.new(key: :cached_profiles,
+                                      description: "A list of cached bundle ids",
+                                      optional: true,
+                                      is_string: false,
+                                      default_value: nil,
+                                      verify_block: proc do |value|
+                                        next if value.nil?
+                                        if !value.kind_of?(Array) ||
+                                          !value.all?(Spaceship::ConnectAPI::Profile)
+                                          UI.user_error!("cached_profiles parameter must be an array of Spaceship::ConnectAPI::Profile")
+                                        end
+                                      end)
       ]
     end
   end

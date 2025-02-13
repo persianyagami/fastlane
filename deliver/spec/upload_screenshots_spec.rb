@@ -4,8 +4,7 @@ require 'fakefs/spec_helpers'
 describe Deliver::UploadScreenshots do
   describe '#delete_screenshots' do
     context 'when localization has a screenshot' do
-      it 'should delete screenshots that AppScreenshotIterator gives' do
-        app_screenshot = double('Spaceship::ConnectAPI::AppScreenshot', id: 'some-id')
+      it 'should delete screenshots by screenshot_sets that AppScreenshotIterator gives' do
         # return empty by `app_screenshots` as `each_app_screenshot_set` mocked needs it empty
         app_screenshot_set = double('Spaceship::ConnectAPI::AppScreenshotSet',
                                     screenshot_display_type: Spaceship::ConnectAPI::AppScreenshotSet::DisplayType::APP_IPHONE_55,
@@ -15,10 +14,13 @@ describe Deliver::UploadScreenshots do
                               get_app_screenshot_sets: [app_screenshot_set])
         screenshots_per_language = { 'en-US' => [] }
 
-        allow_any_instance_of(Deliver::AppScreenshotIterator).to receive(:each_app_screenshot).and_yield(localization, app_screenshot_set, app_screenshot)
-        allow_any_instance_of(Deliver::AppScreenshotIterator).to receive(:each_app_screenshot_set).and_return([[localization, app_screenshot_set]])
+        # emulate Deliver::AppScreenshotIterator#each_app_screenshot_set's two behaviors with or without given block
+        allow_any_instance_of(Deliver::AppScreenshotIterator).to receive(:each_app_screenshot_set) do |&args|
+          next([[localization, app_screenshot_set]]) unless args
+          args.call(localization, app_screenshot_set)
+        end
 
-        expect(app_screenshot).to receive(:delete!).once
+        expect(app_screenshot_set).to receive(:delete!)
         described_class.new.delete_screenshots([localization], screenshots_per_language)
       end
     end
@@ -33,13 +35,17 @@ describe Deliver::UploadScreenshots do
                               get_app_screenshot_sets: [app_screenshot_set])
         screenshots_per_language = { 'en-US' => [] }
 
-        allow_any_instance_of(Deliver::AppScreenshotIterator).to receive(:each_app_screenshot).and_yield(localization, app_screenshot_set, app_screenshot)
-        # Return an screenshot once to fail validation and then return empty next time to pass it
+        # emulate Deliver::AppScreenshotIterator#each_app_screenshot_set's two behaviors with or without given block
+        allow_any_instance_of(Deliver::AppScreenshotIterator).to receive(:each_app_screenshot_set) do |&args|
+          next([[localization, app_screenshot_set]]) unless args
+          args.call(localization, app_screenshot_set)
+        end
+
+        # Return a screenshot once to fail validation and then return empty next time to pass it
         allow(app_screenshot_set).to receive(:app_screenshots).exactly(2).times.and_return([app_screenshot], [])
-        allow_any_instance_of(Deliver::AppScreenshotIterator).to receive(:each_app_screenshot_set).and_return([[localization, app_screenshot_set]])
 
         # Try `delete!` twice by retry
-        expect(app_screenshot).to receive(:delete!).twice
+        expect(app_screenshot_set).to receive(:delete!).twice
         described_class.new.delete_screenshots([localization], screenshots_per_language)
       end
     end
@@ -49,7 +55,7 @@ describe Deliver::UploadScreenshots do
     subject { described_class.new }
 
     before do
-      # mock these methods partially to simplfy test cases
+      # mock these methods partially to simplify test cases
       allow(subject).to receive(:wait_for_complete)
       allow(subject).to receive(:retry_upload_screenshots_if_needed)
     end
@@ -68,10 +74,12 @@ describe Deliver::UploadScreenshots do
                                     language: 'en-US',
                                     device_type: Spaceship::ConnectAPI::AppScreenshotSet::DisplayType::APP_IPHONE_55)
           screenshots_per_language = { 'en-US' => [local_screenshot] }
+
+          allow(FastlaneCore::Helper).to receive(:show_loading_indicator).and_return(true)
           allow(described_class).to receive(:calculate_checksum).and_return('checksum')
 
           expect(app_screenshot_set).to receive(:upload_screenshot).with(path: local_screenshot.path, wait_for_processing: false)
-          subject.upload_screenshots([localization], screenshots_per_language)
+          subject.upload_screenshots([localization], screenshots_per_language, 3600)
         end
       end
 
@@ -90,8 +98,9 @@ describe Deliver::UploadScreenshots do
           screenshots_per_language = { 'en-US' => [local_screenshot] }
           allow(described_class).to receive(:calculate_checksum).and_return('checksum')
 
+          allow(FastlaneCore::Helper).to receive(:show_loading_indicator).and_return(true)
           expect(app_screenshot_set).to receive(:upload_screenshot).with(path: local_screenshot.path, wait_for_processing: false)
-          subject.upload_screenshots([localization], screenshots_per_language)
+          subject.upload_screenshots([localization], screenshots_per_language, 3600)
         end
       end
     end
@@ -111,8 +120,9 @@ describe Deliver::UploadScreenshots do
         screenshots_per_language = { 'en-US' => [local_screenshot] }
         allow(described_class).to receive(:calculate_checksum).and_return('checksum')
 
+        allow(FastlaneCore::Helper).to receive(:show_loading_indicator).and_return(true)
         expect(app_screenshot_set).to receive(:upload_screenshot).with(path: local_screenshot.path, wait_for_processing: false)
-        subject.upload_screenshots([localization], screenshots_per_language)
+        subject.upload_screenshots([localization], screenshots_per_language, 3600)
       end
     end
 
@@ -133,8 +143,9 @@ describe Deliver::UploadScreenshots do
         screenshots_per_language = { 'en-US' => [local_screenshot] }
         allow(described_class).to receive(:calculate_checksum).with(local_screenshot.path).and_return('checksum')
 
+        allow(FastlaneCore::Helper).to receive(:show_loading_indicator).and_return(true)
         expect(app_screenshot_set).to_not(receive(:upload_screenshot))
-        subject.upload_screenshots([localization], screenshots_per_language)
+        subject.upload_screenshots([localization], screenshots_per_language, 3600)
       end
     end
 
@@ -153,8 +164,9 @@ describe Deliver::UploadScreenshots do
         screenshots_per_language = { 'en-US' => Array.new(11, local_screenshot) }
         allow(described_class).to receive(:calculate_checksum).with(local_screenshot.path).and_return('checksum')
 
+        allow(FastlaneCore::Helper).to receive(:show_loading_indicator).and_return(true)
         expect(app_screenshot_set).to receive(:upload_screenshot).exactly(10).times
-        subject.upload_screenshots([localization], screenshots_per_language)
+        subject.upload_screenshots([localization], screenshots_per_language, 3600)
       end
     end
 
@@ -180,8 +192,9 @@ describe Deliver::UploadScreenshots do
         allow(described_class).to receive(:calculate_checksum).with(uploaded_local_screenshot.path).and_return('checksum')
         allow(described_class).to receive(:calculate_checksum).with(new_local_screenshot.path).and_return('another_checksum')
 
+        allow(FastlaneCore::Helper).to receive(:show_loading_indicator).and_return(true)
         expect(app_screenshot_set).to_not(receive(:upload_screenshot))
-        subject.upload_screenshots([localization], screenshots_per_language)
+        subject.upload_screenshots([localization], screenshots_per_language, 3600)
       end
     end
 
@@ -209,8 +222,9 @@ describe Deliver::UploadScreenshots do
         allow(described_class).to receive(:calculate_checksum).with(uploaded_local_screenshot.path).and_return('checksum')
         allow(described_class).to receive(:calculate_checksum).with(new_local_screenshot.path).and_return('another_checksum')
 
+        allow(FastlaneCore::Helper).to receive(:show_loading_indicator).and_return(true)
         expect(app_screenshot_set).to_not(receive(:upload_screenshot))
-        subject.upload_screenshots([localization], screenshots_per_language)
+        subject.upload_screenshots([localization], screenshots_per_language, 3600)
       end
     end
   end
@@ -228,8 +242,10 @@ describe Deliver::UploadScreenshots do
                               get_app_screenshot_sets: [app_screenshot_set])
         iterator = Deliver::AppScreenshotIterator.new([localization])
 
+        allow(Time).to receive(:now).and_return(0)
+
         expect(::Kernel).to_not(receive(:sleep))
-        expect(subject.wait_for_complete(iterator)).to eq('COMPLETE' => 1)
+        expect(subject.wait_for_complete(iterator, 3600)).to eq('COMPLETE' => 1)
       end
     end
 
@@ -244,9 +260,29 @@ describe Deliver::UploadScreenshots do
                               get_app_screenshot_sets: [app_screenshot_set])
         iterator = Deliver::AppScreenshotIterator.new([localization])
 
+        allow(Time).to receive(:now).and_return(0)
+
         expect_any_instance_of(Object).to receive(:sleep).with(kind_of(Numeric)).once
         expect(app_screenshot).to receive(:asset_delivery_state).and_return({ 'state' => 'UPLOAD_COMPLETE' }, { 'state' => 'COMPLETE' })
-        expect(subject.wait_for_complete(iterator)).to eq('COMPLETE' => 1)
+        expect(subject.wait_for_complete(iterator, 3600)).to eq('COMPLETE' => 1)
+      end
+    end
+
+    context 'when timeout is exceeded' do
+      it 'should exit the loop and return the current states' do
+        app_screenshot = double('Spaceship::ConnectAPI::AppScreenshot', asset_delivery_state: { 'state' => 'UPLOAD_COMPLETE' })
+        app_screenshot_set = double('Spaceship::ConnectAPI::AppScreenshotSet',
+                                    screenshot_display_type: Spaceship::ConnectAPI::AppScreenshotSet::DisplayType::APP_IPHONE_55,
+                                    app_screenshots: [app_screenshot])
+        localization = double('Spaceship::ConnectAPI::AppStoreVersionLocalization',
+                              locale: 'en-US',
+                              get_app_screenshot_sets: [app_screenshot_set])
+        iterator = Deliver::AppScreenshotIterator.new([localization])
+        states = { 'UPLOAD_COMPLETE' => 1 }
+
+        allow(Time).to receive(:now).and_return(0, 3601)
+
+        expect(subject.wait_for_complete(iterator, 3600)).to eq(states)
       end
     end
   end
@@ -265,11 +301,11 @@ describe Deliver::UploadScreenshots do
         states = { 'FAILD' => 0, 'COMPLETE' => 1 }
 
         expect(subject).to_not(receive(:upload_screenshots))
-        subject.retry_upload_screenshots_if_needed(iterator, states, 1, 1, [], {})
+        subject.retry_upload_screenshots_if_needed(iterator, states, 1, 1, 0, [], {})
       end
     end
 
-    context 'when one of the screenshots is FAILD state and tries reamins non zero' do
+    context 'when one of the screenshots is FAILD state and tries remains non zero' do
       it 'should retry upload_screenshots' do
         app_screenshot = double('Spaceship::ConnectAPI::AppScreenshot', 'complete?' => false, 'error?' => true)
         app_screenshot_set = double('Spaceship::ConnectAPI::AppScreenshotSet',
@@ -283,7 +319,7 @@ describe Deliver::UploadScreenshots do
 
         expect(subject).to receive(:upload_screenshots).with(any_args)
         expect(app_screenshot).to receive(:delete!)
-        subject.retry_upload_screenshots_if_needed(iterator, states, 1, 1, [], {})
+        subject.retry_upload_screenshots_if_needed(iterator, states, 1, 1, 0, [], {})
       end
     end
 
@@ -300,7 +336,7 @@ describe Deliver::UploadScreenshots do
         states = { 'FAILED' => 1, 'COMPLETE' => 0 }
 
         expect(subject).to receive(:upload_screenshots).with(any_args)
-        subject.retry_upload_screenshots_if_needed(iterator, states, 999, 1, [], {})
+        subject.retry_upload_screenshots_if_needed(iterator, states, 999, 1, 0, [], {})
       end
     end
 
@@ -322,7 +358,7 @@ describe Deliver::UploadScreenshots do
 
         expect(subject).to_not(receive(:upload_screenshots).with(any_args))
         expect(UI).to receive(:user_error!)
-        subject.retry_upload_screenshots_if_needed(iterator, states, 1, 0, [], {})
+        subject.retry_upload_screenshots_if_needed(iterator, states, 1, 0, 0, [], {})
       end
     end
 
@@ -343,7 +379,30 @@ describe Deliver::UploadScreenshots do
 
         expect(subject).to_not(receive(:upload_screenshots).with(any_args))
         expect(UI).to_not(receive(:user_error!))
-        subject.retry_upload_screenshots_if_needed(iterator, states, number_of_screenshots, 0, [], screenshots_per_language)
+        subject.retry_upload_screenshots_if_needed(iterator, states, number_of_screenshots, 0, 0, [], screenshots_per_language)
+      end
+    end
+
+    context 'when screenshots are in UPLOAD_COMPLETE state' do
+      it 'should trigger retry logic' do
+        app_screenshot = double('Spaceship::ConnectAPI::AppScreenshot',
+                                'complete?' => false,
+                                'error?' => false,
+                                file_name: '5.5_1.jpg',
+                                error_messages: ['error_message'])
+        app_screenshot_set = double('Spaceship::ConnectAPI::AppScreenshotSet',
+                                    screenshot_display_type: Spaceship::ConnectAPI::AppScreenshotSet::DisplayType::APP_IPHONE_55,
+                                    app_screenshots: [app_screenshot])
+        localization = double('Spaceship::ConnectAPI::AppStoreVersionLocalization',
+                              locale: 'en-US',
+                              get_app_screenshot_sets: [app_screenshot_set])
+        localizations = [localization]
+        iterator = Deliver::AppScreenshotIterator.new(localizations)
+        states = { 'UPLOAD_COMPLETE' => 1 }
+
+        expect(subject).to receive(:upload_screenshots).with(any_args)
+        expect(app_screenshot).to receive(:delete!)
+        subject.retry_upload_screenshots_if_needed(iterator, states, 1, 1, 0, localizations, {})
       end
     end
   end
@@ -401,7 +460,7 @@ describe Deliver::UploadScreenshots do
     end
 
     context 'when localization has screenshots uploaded in wrong order' do
-      it 'should reoder screenshots' do
+      it 'should reorder screenshots' do
         app_screenshot1 = make_app_screenshot(id: '1', file_name: '6.5_1.jpg')
         app_screenshot2 = make_app_screenshot(id: '2', file_name: '6.5_2.jpg')
         app_screenshot3 = make_app_screenshot(id: '3', file_name: '6.5_3.jpg')
@@ -412,6 +471,22 @@ describe Deliver::UploadScreenshots do
                               locale: 'en-US',
                               get_app_screenshot_sets: [app_screenshot_set])
         expect(app_screenshot_set).to receive(:reorder_screenshots).with(app_screenshot_ids: ['1', '2', '3'])
+        described_class.new.sort_screenshots([localization])
+      end
+    end
+
+    context 'when localization has screenshots uploaded in wrong order with trailing numbers up to 10' do
+      it 'should reorder screenshots' do
+        app_screenshot1 = make_app_screenshot(id: '1', file_name: '6.5_1.jpg')
+        app_screenshot2 = make_app_screenshot(id: '2', file_name: '6.5_2.jpg')
+        app_screenshot10 = make_app_screenshot(id: '10', file_name: '6.5_10.jpg')
+        app_screenshot_set = double('Spaceship::ConnectAPI::AppScreenshotSet',
+                                    screenshot_display_type: Spaceship::ConnectAPI::AppScreenshotSet::DisplayType::APP_IPHONE_55,
+                                    app_screenshots: [app_screenshot10, app_screenshot2, app_screenshot1])
+        localization = double('Spaceship::ConnectAPI::AppStoreVersionLocalization',
+                              locale: 'en-US',
+                              get_app_screenshot_sets: [app_screenshot_set])
+        expect(app_screenshot_set).to receive(:reorder_screenshots).with(app_screenshot_ids: ['1', '2', '10'])
         described_class.new.sort_screenshots([localization])
       end
     end

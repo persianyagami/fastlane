@@ -19,12 +19,13 @@ module Fastlane
       end
 
       def self.fetch_plugins(cache_path)
+        require 'open-uri'
         page = 1
         plugins = []
         loop do
           url = "https://rubygems.org/api/v1/search.json?query=fastlane-plugin-&page=#{page}"
           puts("RubyGems API Request: #{url}")
-          results = JSON.parse(open(url).read)
+          results = JSON.parse(URI.open(url).read)
           break if results.count == 0
 
           plugins += results.collect do |current|

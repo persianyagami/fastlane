@@ -11,7 +11,7 @@ module Fastlane
         command << upload_progress(params)
 
         # Fastlane::Actions.sh has buffering issues, no progress bar is shown in real time
-        # will reanable it when it is fixed
+        # will reenable it when it is fixed
         # result = Fastlane::Actions.sh(command.join(' '), log: false)
         shell_command = command.join(' ')
         result = Helper.test? ? shell_command : `#{shell_command}`
@@ -101,13 +101,13 @@ module Fastlane
           FastlaneCore::ConfigItem.new(key: :verbose,
                                        env_name: "FL_SPLUNKMINT_VERBOSE",
                                        description: "Make detailed output",
-                                       is_string: false,
+                                       type: Boolean,
                                        default_value: false,
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :upload_progress,
                                        env_name: "FL_SPLUNKMINT_UPLOAD_PROGRESS",
                                        description: "Show upload progress",
-                                       is_string: false,
+                                       type: Boolean,
                                        default_value: false,
                                        optional: true),
           FastlaneCore::ConfigItem.new(key: :proxy_username,

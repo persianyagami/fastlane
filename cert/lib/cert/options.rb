@@ -38,7 +38,7 @@ module Cert
 
         # App Store Connect API
         FastlaneCore::ConfigItem.new(key: :api_key_path,
-                                     env_name: "DELIVER_API_KEY_PATH",
+                                     env_names: ["CERT_API_KEY_PATH", "DELIVER_API_KEY_PATH", "APP_STORE_CONNECT_API_KEY_PATH"],
                                      description: "Path to your App Store Connect API Key JSON file (https://docs.fastlane.tools/app-store-connect-api/#using-fastlane-api-key-json-file)",
                                      optional: true,
                                      conflicting_options: [:api_key],
@@ -46,8 +46,8 @@ module Cert
                                        UI.user_error!("Couldn't find API key JSON file at path '#{value}'") unless File.exist?(value)
                                      end),
         FastlaneCore::ConfigItem.new(key: :api_key,
-                                     env_name: "DELIVER_API_KEY",
-                                     description: "Your App Store Connect API Key information (https://docs.fastlane.tools/app-store-connect-api/#use-return-value-and-pass-in-as-an-option)",
+                                     env_names: ["CERT_API_KEY", "DELIVER_API_KEY", "APP_STORE_CONNECT_API_KEY"],
+                                     description: "Your App Store Connect API Key information (https://docs.fastlane.tools/app-store-connect-api/#using-fastlane-api-key-hash-option)",
                                      type: Hash,
                                      optional: true,
                                      sensitive: true,
@@ -58,6 +58,7 @@ module Cert
                                      short_option: "-u",
                                      env_name: "CERT_USERNAME",
                                      description: "Your Apple ID Username",
+                                     optional: true,
                                      default_value: user,
                                      default_value_dynamic: true),
         FastlaneCore::ConfigItem.new(key: :team_id,
@@ -99,9 +100,11 @@ module Cert
                                      env_name: "CERT_KEYCHAIN_PATH",
                                      description: "Path to a custom keychain",
                                      code_gen_sensitive: true,
-                                     default_value: Dir["#{Dir.home}/Library/Keychains/login.keychain", "#{Dir.home}/Library/Keychains/login.keychain-db"].last,
+                                     default_value: Helper.mac? ? Dir["#{Dir.home}/Library/Keychains/login.keychain", "#{Dir.home}/Library/Keychains/login.keychain-db"].last : nil,
                                      default_value_dynamic: true,
+                                     optional: true,
                                      verify_block: proc do |value|
+                                       UI.user_error!("Keychain is not supported on platforms other than macOS") if !Helper.mac? && value
                                        value = File.expand_path(value)
                                        UI.user_error!("Keychain not found at path '#{value}'") unless File.exist?(value)
                                      end),
@@ -110,7 +113,10 @@ module Cert
                                      env_name: "CERT_KEYCHAIN_PASSWORD",
                                      sensitive: true,
                                      description: "This might be required the first time you access certificates on a new mac. For the login/default keychain this is your macOS account password",
-                                     optional: true),
+                                     optional: true,
+                                     verify_block: proc do |value|
+                                       UI.user_error!("Keychain is not supported on platforms other than macOS") unless Helper.mac?
+                                     end),
         FastlaneCore::ConfigItem.new(key: :skip_set_partition_list,
                                      short_option: "-P",
                                      env_name: "CERT_SKIP_SET_PARTITION_LIST",
